@@ -1,0 +1,74 @@
+#include <stdio.h>
+#include <string.h>
+
+#define FLAG 0x7E
+#define ESC  0x7D
+#define XOR_BYTE 0x20
+
+void ppp_encode(unsigned char *data, int data_len, unsigned char *frame, int *frame_len) {
+    int j = 0;
+    int i;
+
+    /* Opening Flag */
+    frame[j++] = FLAG;
+
+    for (i = 0; i < data_len; i++) {
+        /* If data byte matches Flag or Escape character, stuff it */
+        if (data[i] == FLAG || data[i] == ESC) {
+            frame[j++] = ESC;
+            frame[j++] = data[i] ^ XOR_BYTE;
+        } else {
+            frame[j++] = data[i];
+        }
+    }
+
+    /* Closing Flag */
+    frame[j++] = FLAG;
+    *frame_len = j;
+}
+
+void ppp_decode(unsigned char *frame, int frame_len, unsigned char *data, int *data_len) {
+    int j = 0;
+    int i;
+
+    /* Skip opening flag (i=1) and end before closing flag (frame_len-1) */
+    for (i = 1; i < frame_len - 1; i++) {
+        if (frame[i] == ESC) {
+            /* Destuff: skip ESC byte, XOR next byte to restore */
+            i++;
+            data[j++] = frame[i] ^ XOR_BYTE;
+        } else {
+            data[j++] = frame[i];
+        }
+    }
+    *data_len = j;
+}
+
+int main() {
+    /* Input data payload containing raw occurrences of target control flags */
+    unsigned char data[] = {0x11, FLAG, 0x22, ESC, 0x33};
+    int data_len = sizeof(data);
+
+    unsigned char frame[100];
+    int frame_len = 0;
+
+    unsigned char decoded[100];
+    int decoded_len = 0;
+    int i;
+
+    printf("Original Data bytes : ");
+    for(i = 0; i < data_len; i++) printf("%02X ", data[i]);
+    printf("\n");
+
+    ppp_encode(data, data_len, frame, &frame_len);
+    printf("PPP Encoded Frame   : ");
+    for(i = 0; i < frame_len; i++) printf("%02X ", frame[i]);
+    printf("\n");
+
+    ppp_decode(frame, frame_len, decoded, &decoded_len);
+    printf("Decoded Data bytes  : ");
+    for(i = 0; i < decoded_len; i++) printf("%02X ", decoded[i]);
+    printf("\n");
+
+    return 0;
+}
