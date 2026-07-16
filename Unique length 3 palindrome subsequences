@@ -1,0 +1,41 @@
+#include <string.h>
+#include <stdbool.h>
+
+int countPalindromicSubsequence(char* s) {
+    int n = strlen(s);
+    int first[26];
+    int last[26];
+
+    for (int i = 0; i < 26; i++) {
+        first[i] = -1;
+        last[i] = -1;
+    }
+
+    for (int i = 0; i < n; i++) {
+        int char_idx = s[i] - 'a';
+        if (first[char_idx] == -1) {
+            first[char_idx] = i;
+        }
+        last[char_idx] = i;
+    }
+
+    int total_unique_palindromes = 0;
+
+    for (int i = 0; i < 26; i++) {
+        if (first[i] != -1 && last[i] > first[i] + 1) {
+            bool visited_middle[26] = {false};
+            int unique_char_count = 0;
+
+            for (int mid = first[i] + 1; mid < last[i]; mid++) {
+                int mid_char_idx = s[mid] - 'a';
+                if (!visited_middle[mid_char_idx]) {
+                    visited_middle[mid_char_idx] = true;
+                    unique_char_count++;
+                }
+            }
+            total_unique_palindromes += unique_char_count;
+        }
+    }
+
+    return total_unique_palindromes;
+}
