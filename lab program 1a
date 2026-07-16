@@ -1,0 +1,1132 @@
+#include<stdio.h>
+#include<stdlib.h>
+#include<string.h>
+#include<time.h>
+
+#define TABLESIZE 10
+
+char message[1000];
+
+char sourceurl[50];
+char destinationurl[50];
+
+char sourceipaddress[20];
+char destinationipaddress[20];
+
+char sourcemacaddress[25];
+char destinationmacaddress[25];
+
+char messageBinaryString[10000];
+char segment[12000];
+char packet[15000];
+char frame[18000];
+
+int sourceport;
+int destinationport;
+
+int H2=2;
+int H3=3;
+int H4=4;
+
+struct Node
+{
+    char URL[50];
+    char IP[20];
+    char MAC[25];
+
+    struct Node *next;
+};
+
+struct Node *hashtable[TABLESIZE]={NULL};
+
+int hash(char URL[])
+{
+    int sum=0;
+
+    int i;
+
+    for(i=0;URL[i]!='\0';i++)
+        sum+=URL[i];
+
+    return sum%TABLESIZE;
+}
+
+void insert(char URL[],char IP[],char MAC[])
+{
+    int index=hash(URL);
+
+    struct Node *newNode;
+
+    newNode=(struct Node*)malloc(sizeof(struct Node));
+
+    strcpy(newNode->URL,URL);
+    strcpy(newNode->IP,IP);
+    strcpy(newNode->MAC,MAC);
+
+    newNode->next=hashtable[index];
+
+
+    hashtable[index]=newNode;
+}
+
+struct Node *search(char URL[])
+{
+    int index=hash(URL);
+
+    struct Node *temp=hashtable[index];
+
+    while(temp!=NULL)
+    {
+        if(strcmp(temp->URL,URL)==0)
+            return temp;
+
+        temp=temp->next;
+    }
+
+    return NULL;
+}
+
+void deleteNode(char URL[])
+{
+    int index=hash(URL);
+
+    struct Node *temp=hashtable[index];
+    struct Node *prev=NULL;
+
+    while(temp!=NULL)
+    {
+        if(strcmp(temp->URL,URL)==0)
+        {
+            if(prev==NULL)
+                hashtable[index]=temp->next;
+            else
+                prev->next=temp->next;
+
+            free(temp);
+
+            printf("\nDeleted Successfully\n");
+
+            return;
+        }
+
+        prev=temp;
+        temp=temp->next;
+    }
+
+    printf("\nURL Not Found\n");
+}
+
+void display()
+{
+    int i;
+
+    printf("\n==============================\n");
+    printf("HASH TABLE");
+    printf("\n==============================\n");
+
+    for(i=0;i<TABLESIZE;i++)
+    {
+        printf("\nBucket %d :",i);
+
+        struct Node *temp=hashtable[i];
+
+        while(temp!=NULL)
+        {
+            printf("\nURL : %s",temp->URL);
+            printf("\nIP  : %s",temp->IP);
+            printf("\nMAC : %s",temp->MAC);
+            printf("\n");
+
+            temp=temp->next;
+        }
+    }
+}
+
+void initializeTable()
+{
+    insert("www.google.com",
+           "142.250.183.14",
+           "AA:BB:CC:11:22:33");
+
+    insert("www.gmail.com",
+           "142.250.183.15",
+           "AA:BB:CC:11:22:44");
+
+    insert("www.yahoo.com",
+           "98.137.11.163",
+           "AA:BB:CC:11:22:55");
+
+    insert("www.amazon.com",
+           "176.32.103.205",
+           "AA:BB:CC:11:22:66");
+
+    insert("www.facebook.com",
+           "157.240.22.35",
+           "AA:BB:CC:11:22:77");
+}
+
+//====================== MESSAGE FUNCTIONS ======================
+
+void readMessage()
+{
+    FILE *fp = fopen("message.txt", "r");
+
+    if(fp == NULL)
+    {
+        printf("\nmessage.txt not found.\n");
+        exit(0);
+    }
+
+    fgets(message, sizeof(message), fp);
+
+    fclose(fp);
+
+    printf("\nOriginal Message:\n%s\n", message);
+}
+
+void dataSize()
+{
+    printf("\nData Size : %d Bytes\n", (int)strlen(message));
+}
+
+//====================== BINARY CONVERSION ======================
+
+void decimalToBinary(int num, char binary[])
+{
+    int i;
+
+    for(i = 7; i >= 0; i--)
+        binary[7 - i] = ((num >> i) & 1) + '0';
+
+
+//====================== MESSAGE FUNCTIONS ======================
+
+void readMessage()
+{
+    FILE *fp = fopen("message.txt", "r");
+
+    if(fp == NULL)
+    {
+        printf("\nmessage.txt not found.\n");
+        exit(0);
+    }
+
+    fgets(message, sizeof(message), fp);
+
+    fclose(fp);
+
+    printf("\nOriginal Message:\n%s\n", message);
+}
+
+void dataSize()
+{
+    printf("\nData Size : %d Bytes\n", (int)strlen(message));
+}
+
+//====================== BINARY CONVERSION ======================
+
+void decimalToBinary(int num, char binary[])
+{
+    int i;
+
+    for(i = 7; i >= 0; i--)
+        binary[7 - i] = ((num >> i) & 1) + '0';
+
+
+//====================== MESSAGE FUNCTIONS ======================
+
+void readMessage()
+{
+    FILE *fp = fopen("message.txt", "r");
+
+    if(fp == NULL)
+    {
+        printf("\nmessage.txt not found.\n");
+        exit(0);
+    }
+
+    fgets(message, sizeof(message), fp);
+
+    fclose(fp);
+
+    printf("\nOriginal Message:\n%s\n", message);
+}
+
+void dataSize()
+{
+    printf("\nData Size : %d Bytes\n", (int)strlen(message));
+}
+
+//====================== BINARY CONVERSION ======================
+
+void decimalToBinary(int num, char binary[])
+{
+    int i;
+
+    for(i = 7; i >= 0; i--)
+        binary[7 - i] = ((num >> i) & 1) + '0';
+
+
+    binary[8] = '\0';
+}
+
+void binary(int n)
+{
+    int i;
+
+    for(i = 7; i >= 0; i--)
+        printf("%d", (n >> i) & 1);
+}
+
+void messageBinary()
+{
+    int i;
+    char temp[10];
+
+    messageBinaryString[0] = '\0';
+
+    printf("\nBinary Message:\n");
+
+    for(i = 0; message[i] != '\0'; i++)
+    {
+        decimalToBinary((unsigned char)message[i], temp);
+
+        strcat(messageBinaryString, temp);
+
+        printf("%s ", temp);
+    }
+
+    printf("\n");
+}
+
+//====================== IP TO BINARY ======================
+
+
+void ipToBinary(char ip[], char output[])
+{
+    int a, b, c, d;
+
+    char t[10];
+
+    output[0] = '\0';
+
+    sscanf(ip, "%d.%d.%d.%d", &a, &b, &c, &d);
+
+    decimalToBinary(a, t);
+    strcat(output, t);
+
+    decimalToBinary(b, t);
+    strcat(output, t);
+
+    decimalToBinary(c, t);
+    strcat(output, t);
+
+    decimalToBinary(d, t);
+    strcat(output, t);
+}
+
+//====================== HEX TO BINARY ======================
+
+void hexBinary(char ch)
+{
+    switch(ch)
+    {
+        case '0': printf("0000"); break;
+        case '1': printf("0001"); break;
+        case '2': printf("0010"); break;
+        case '3': printf("0011"); break;
+        case '4': printf("0100"); break;
+        case '5': printf("0101"); break;
+        case '6': printf("0110"); break;
+        case '7': printf("0111"); break;
+        case '8': printf("1000"); break;
+        case '9': printf("1001"); break;
+        case 'A':
+        case 'a': printf("1010"); break;
+        case 'B':
+        case 'b': printf("1011"); break;
+        case 'C':
+        case 'c': printf("1100"); break;
+        case 'D':
+        case 'd': printf("1101"); break;
+        case 'E':
+        case 'e': printf("1110"); break;
+        case 'F':
+        case 'f': printf("1111"); break;
+    }
+}
+
+void macToBinary(char mac[], char output[])
+{
+    int i;
+
+    output[0] = '\0';
+
+    for(i = 0; mac[i] != '\0'; i++)
+    {
+        if(mac[i] == ':')
+            continue;
+
+        switch(mac[i])
+        {
+
+            case '0': strcat(output,"0000"); break;
+            case '1': strcat(output,"0001"); break;
+            case '2': strcat(output,"0010"); break;
+            case '3': strcat(output,"0011"); break;
+            case '4': strcat(output,"0100"); break;
+            case '5': strcat(output,"0101"); break;
+            case '6': strcat(output,"0110"); break;
+            case '7': strcat(output,"0111"); break;
+            case '8': strcat(output,"1000"); break;
+            case '9': strcat(output,"1001"); break;
+            case 'A':
+            case 'a': strcat(output,"1010"); break;
+            case 'B':
+            case 'b': strcat(output,"1011"); break;
+            case 'C':
+            case 'c': strcat(output,"1100"); break;
+            case 'D':
+            case 'd': strcat(output,"1101"); break;
+            case 'E':
+            case 'e': strcat(output,"1110"); break;
+            case 'F':
+            case 'f': strcat(output,"1111"); break;
+        }
+    }
+}
+
+//====================== URL DETAILS ======================
+
+void getURL()
+{
+    printf("\nEnter Source URL : ");
+    scanf("%49s", sourceurl);
+
+    printf("Enter Destination URL : ");
+    scanf("%49s", destinationurl);
+}
+
+void getSourceDetails()
+{
+    struct Node *temp = search(sourceurl);
+
+    if(temp == NULL)
+    {
+        printf("\nSource URL Not Found\n");
+        exit(0);
+    }
+
+    strcpy(sourceipaddress, temp->IP);
+    strcpy(sourcemacaddress, temp->MAC);
+
+    printf("\nSource Details\n");
+    printf("IP  : %s\n", sourceipaddress);
+    printf("MAC : %s\n", sourcemacaddress);
+}
+
+void getDestinationDetails()
+{
+    struct Node *temp = search(destinationurl);
+
+    if(temp == NULL)
+    {
+        printf("\nDestination URL Not Found\n");
+        exit(0);
+    }
+
+    strcpy(destinationipaddress, temp->IP);
+    strcpy(destinationmacaddress, temp->MAC);
+
+    printf("\nDestination Details\n");
+    printf("IP  : %s\n", destinationipaddress);
+    printf("MAC : %s\n", destinationmacaddress);
+}
+
+//====================== PORT ======================
+
+void generatePort()
+{
+    srand((unsigned)time(NULL));
+
+    sourceport = 1000 + rand() % 9000;
+    destinationport = 1000 + rand() % 9000;
+
+    printf("\nSource Port      : %d", sourceport);
+    printf("\nDestination Port : %d\n", destinationport);
+}
+
+//====================== LAYER DISPLAY ======================
+
+void transportLayer()
+{
+    printf("\n=====================================\n");
+    printf("TRANSPORT LAYER");
+    printf("\n=====================================\n");
+}
+
+void networkLayer()
+{
+    printf("\n=====================================\n");
+    printf("NETWORK LAYER");
+    printf("\n=====================================\n");
+}
+
+void dataLinkLayer()
+{
+    printf("\n=====================================\n");
+    printf("DATA LINK LAYER");
+    printf("\n=====================================\n");
+}
+
+//====================== CREATE SEGMENT ======================
+
+void createSegment()
+{
+    char h4[20];
+    char srcPort[20];
+    char dstPort[20];
+case 'D':
+        case 'd': printf("1101"); break;
+        case 'E':
+        case 'e': printf("1110"); break;
+        case 'F':
+        case 'f': printf("1111"); break;
+    }
+}
+
+void macToBinary(char mac[], char output[])
+{
+    int i;
+
+    output[0] = '\0';
+
+    for(i = 0; mac[i] != '\0'; i++)
+    {
+        if(mac[i] == ':')
+            continue;
+
+        switch(mac[i])
+        {
+
+            case '0': strcat(output,"0000"); break;
+            case '1': strcat(output,"0001"); break;
+            case '2': strcat(output,"0010"); break;
+            case '3': strcat(output,"0011"); break;
+            case '4': strcat(output,"0100"); break;
+            case '5': strcat(output,"0101"); break;
+            case '6': strcat(output,"0110"); break;
+            case '7': strcat(output,"0111"); break;
+            case '8': strcat(output,"1000"); break;
+            case '9': strcat(output,"1001"); break;
+            case 'A':
+            case 'a': strcat(output,"1010"); break;
+            case 'B':
+            case 'b': strcat(output,"1011"); break;
+            case 'C':
+            case 'c': strcat(output,"1100"); break;
+            case 'D':
+            case 'd': strcat(output,"1101"); break;
+            case 'E':
+            case 'e': strcat(output,"1110"); break;
+            case 'F':
+            case 'f': strcat(output,"1111"); break;
+        }
+    }
+}
+
+//====================== URL DETAILS ======================
+
+void getURL()
+{
+    printf("\nEnter Source URL : ");
+    scanf("%49s", sourceurl);
+
+    printf("Enter Destination URL : ");
+    scanf("%49s", destinationurl);
+}
+
+void getSourceDetails()
+{
+    struct Node *temp = search(sourceurl);
+
+    if(temp == NULL)
+    {
+        printf("\nSource URL Not Found\n");
+        exit(0);
+    }
+
+    strcpy(sourceipaddress, temp->IP);
+    strcpy(sourcemacaddress, temp->MAC);
+
+    printf("\nSource Details\n");
+    printf("IP  : %s\n", sourceipaddress);
+    printf("MAC : %s\n", sourcemacaddress);
+}
+
+void getDestinationDetails()
+{
+    struct Node *temp = search(destinationurl);
+
+    if(temp == NULL)
+    {
+        printf("\nDestination URL Not Found\n");
+        exit(0);
+    }
+
+    strcpy(destinationipaddress, temp->IP);
+    strcpy(destinationmacaddress, temp->MAC);
+
+    printf("\nDestination Details\n");
+    printf("IP  : %s\n", destinationipaddress);
+    printf("MAC : %s\n", destinationmacaddress);
+}
+
+//====================== PORT ======================
+
+void generatePort()
+{
+    srand((unsigned)time(NULL));
+
+    sourceport = 1000 + rand() % 9000;
+    destinationport = 1000 + rand() % 9000;
+
+    printf("\nSource Port      : %d", sourceport);
+    printf("\nDestination Port : %d\n", destinationport);
+}
+
+//====================== LAYER DISPLAY ======================
+
+void transportLayer()
+{
+    printf("\n=====================================\n");
+    printf("TRANSPORT LAYER");
+    printf("\n=====================================\n");
+}
+
+void networkLayer()
+{
+    printf("\n=====================================\n");
+    printf("NETWORK LAYER");
+    printf("\n=====================================\n");
+}
+
+void dataLinkLayer()
+{
+    printf("\n=====================================\n");
+    printf("DATA LINK LAYER");
+    printf("\n=====================================\n");
+}
+
+//====================== CREATE SEGMENT ======================
+
+void createSegment()
+{
+    char h4[20];
+    char srcPort[20];
+    char dstPort[20];
+case 'D':
+        case 'd': printf("1101"); break;
+        case 'E':
+        case 'e': printf("1110"); break;
+        case 'F':
+        case 'f': printf("1111"); break;
+    }
+}
+
+void macToBinary(char mac[], char output[])
+{
+    int i;
+
+    output[0] = '\0';
+
+    for(i = 0; mac[i] != '\0'; i++)
+    {
+        if(mac[i] == ':')
+            continue;
+
+        switch(mac[i])
+        {
+
+            case '0': strcat(output,"0000"); break;
+            case '1': strcat(output,"0001"); break;
+            case '2': strcat(output,"0010"); break;
+            case '3': strcat(output,"0011"); break;
+            case '4': strcat(output,"0100"); break;
+            case '5': strcat(output,"0101"); break;
+            case '6': strcat(output,"0110"); break;
+            case '7': strcat(output,"0111"); break;
+            case '8': strcat(output,"1000"); break;
+            case '9': strcat(output,"1001"); break;
+            case 'A':
+            case 'a': strcat(output,"1010"); break;
+            case 'B':
+            case 'b': strcat(output,"1011"); break;
+            case 'C':
+            case 'c': strcat(output,"1100"); break;
+            case 'D':
+            case 'd': strcat(output,"1101"); break;
+            case 'E':
+            case 'e': strcat(output,"1110"); break;
+            case 'F':
+            case 'f': strcat(output,"1111"); break;
+        }
+    }
+}
+
+//====================== URL DETAILS ======================
+
+void getURL()
+{
+    printf("\nEnter Source URL : ");
+    scanf("%49s", sourceurl);
+
+    printf("Enter Destination URL : ");
+    scanf("%49s", destinationurl);
+}
+
+void getSourceDetails()
+{
+    struct Node *temp = search(sourceurl);
+
+    if(temp == NULL)
+    {
+        printf("\nSource URL Not Found\n");
+        exit(0);
+    }
+
+    strcpy(sourceipaddress, temp->IP);
+    strcpy(sourcemacaddress, temp->MAC);
+
+    printf("\nSource Details\n");
+    printf("IP  : %s\n", sourceipaddress);
+    printf("MAC : %s\n", sourcemacaddress);
+}
+
+void getDestinationDetails()
+{
+    struct Node *temp = search(destinationurl);
+
+    if(temp == NULL)
+    {
+        printf("\nDestination URL Not Found\n");
+        exit(0);
+    }
+
+    strcpy(destinationipaddress, temp->IP);
+    strcpy(destinationmacaddress, temp->MAC);
+
+    printf("\nDestination Details\n");
+    printf("IP  : %s\n", destinationipaddress);
+    printf("MAC : %s\n", destinationmacaddress);
+}
+
+//====================== PORT ======================
+
+void generatePort()
+{
+    srand((unsigned)time(NULL));
+
+    sourceport = 1000 + rand() % 9000;
+    destinationport = 1000 + rand() % 9000;
+
+    printf("\nSource Port      : %d", sourceport);
+    printf("\nDestination Port : %d\n", destinationport);
+}
+
+//====================== LAYER DISPLAY ======================
+
+void transportLayer()
+{
+    printf("\n=====================================\n");
+    printf("TRANSPORT LAYER");
+    printf("\n=====================================\n");
+}
+
+void networkLayer()
+{
+    printf("\n=====================================\n");
+    printf("NETWORK LAYER");
+    printf("\n=====================================\n");
+}
+
+void dataLinkLayer()
+{
+    printf("\n=====================================\n");
+    printf("DATA LINK LAYER");
+    printf("\n=====================================\n");
+}
+
+//====================== CREATE SEGMENT ======================
+
+void createSegment()
+{
+    char h4[20];
+    char srcPort[20];
+    char dstPort[20];
+
+    decimalToBinary(H4,h4);
+    decimalToBinary(sourceport,srcPort);
+    decimalToBinary(destinationport,dstPort);
+
+    segment[0]='\0';
+
+    strcpy(segment,h4);
+    strcat(segment,srcPort);
+    strcat(segment,dstPort);
+    strcat(segment,messageBinaryString);
+
+    printf("\nSegment Created Successfully\n");
+    printf("Segment Size : %d Bits\n",(int)strlen(segment));
+}
+
+//====================== CREATE PACKET ======================
+
+void createPacket()
+{
+    char h3[20];
+    char srcIP[100];
+    char dstIP[100];
+
+    decimalToBinary(H3,h3);
+
+    ipToBinary(sourceipaddress,srcIP);
+    ipToBinary(destinationipaddress,dstIP);
+
+    printf("Source IP_Address in Binary:%s\n",srcIP);
+    printf("Destination IP_Address in Binary:%s\n",dstIP);
+
+    packet[0]='\0';
+
+    strcpy(packet,h3);
+
+    strcat(packet,srcIP);
+    strcat(packet,dstIP);
+
+    strcat(packet,segment);
+
+    printf("\nPacket Created Successfully\n");
+    printf("Packet Size : %d Bits\n",(int)strlen(packet));
+}
+
+//====================== CREATE FRAME ======================
+
+void createFrame()
+{
+    char h2[20];
+    char srcMAC[300];
+    char dstMAC[300];
+
+    char srcIP[100];
+    char dstIP[100];
+
+    char srcPortBin[20];
+    char dstPortBin[20];
+
+    decimalToBinary(H2,h2);
+
+    macToBinary(sourcemacaddress,srcMAC);
+    macToBinary(destinationmacaddress,dstMAC);
+
+    ipToBinary(sourceipaddress,srcIP);
+    ipToBinary(destinationipaddress,dstIP);
+
+    printf("Source IP_Address in Binary:%s\n",srcIP);
+    printf("Destionation IP_Address in Binary:%s\n",dstIP);
+
+
+    printf("source MAC_Address in Binary:%s\n",srcMAC);
+    printf("Destination Mac_Address in Binary:%s\n",dstMAC);
+
+    generatePort();
+
+    printf("source port:%d\n",sourceport);
+    printf("destination port:%d\n",destinationport);
+
+    frame[0]='\0';
+
+    strcpy(frame,h2);
+
+    strcat(frame,srcMAC);
+    strcat(frame,dstMAC);
+
+    strcat(frame,packet);
+
+    strcat(frame,"00000000");  // Trailer
+
+    printf("TRAILER:00000000");
+
+    printf("\nFrame Created Successfully\n");
+}
+
+//====================== DISPLAY FRAME ======================
+
+void displayFrame()
+{
+    printf("\n=====================================\n");
+    printf("FINAL FRAME");
+    printf("\n=====================================\n");
+
+    printf("%s\n",frame);
+
+    printf("\nTotal Frame Bits : %d\n",(int)strlen(frame));
+}
+
+//====================== PACKET FORMATION ======================
+
+void packetFormation()
+{
+    int packetSize = 20;
+    int length = strlen(packet);
+
+    int packets = length / packetSize;
+
+    int index = 0;
+    int i,j;
+
+    if(length % packetSize != 0)
+        packets++;
+
+    printf("\n=====================================\n");
+    printf("PACKETS");
+    printf("\n=====================================\n");
+
+
+    for(i=1;i<=packets;i++)
+    {
+        printf("\nPacket %d : ",i);
+
+        for(j=0;j<packetSize;j++)
+        {
+            if(index < length)
+                printf("%c",packet[index++]);
+            else
+                printf("0");
+        }
+
+        printf("\n");
+    }
+}
+//====================== FRAME FORMATION ======================
+
+void frameFormation()
+{
+    int frameSize = 10;
+
+    int length = strlen(frame);
+
+    int frames = length/frameSize;
+
+    int index=0;
+    int i,j;
+
+
+    if(length%frameSize!=0)
+        frames++;
+
+
+    printf("\n=====================================\n");
+    printf("FRAMES");
+    printf("\n=====================================\n");
+
+
+    for(i=1;i<=frames;i++)
+    {
+        printf("\nFrame %d : ",i);
+
+
+        for(j=0;j<frameSize;j++)
+        {
+            if(index < length)
+                printf("%c",frame[index++]);
+            else
+                printf("0");
+        }
+
+        printf("\n");
+    }
+}
+
+//====================== MENU ======================
+
+void menu()
+{
+    printf("\n");
+    printf("=====================================\n");
+    printf(" COMPUTER NETWORK SIMULATOR\n");
+    printf("=====================================\n");
+
+    printf("1. Insert URL\n");
+    printf("2. Delete URL\n");
+    printf("3. Search URL\n");
+    printf("4. Display Table\n");
+    printf("5. Start Transmission\n");
+    printf("6. Exit\n");
+}
+
+
+//====================== MAIN FUNCTION ======================
+
+int main()
+{
+    int choice;
+
+    char url[50];
+    char ip[20];
+    char mac[25];
+
+
+    initializeTable();
+
+
+    while(1)
+    {
+
+        menu();
+
+
+        printf("\nEnter Choice : ");
+        scanf("%d",&choice);
+
+
+        switch(choice)
+        {
+
+            case 1:
+
+                printf("\nEnter URL : ");
+                scanf("%s",url);
+
+                printf("Enter IP Address : ");
+                scanf("%s",ip);
+
+                printf("Enter MAC Address : ");
+                scanf("%s",mac);
+
+
+                insert(url,ip,mac);
+               printf("\nInserted Successfully\n");
+
+                break;
+
+
+
+            case 2:
+
+                printf("\nEnter URL to delete : ");
+                scanf("%s",url);
+
+                deleteNode(url);
+
+                break;
+
+
+
+            case 3:
+
+                printf("\nEnter URL to search : ");
+                scanf("%s",url);
+
+
+                if(search(url)!=NULL)
+                    printf("\nURL Found\n");
+
+                else
+                    printf("\nURL Not Found\n");
+
+
+                break;
+
+
+
+            case 4:
+
+                display();
+
+                break;
+
+
+
+            case 5:
+
+
+                readMessage();
+
+
+                dataSize();
+
+
+                messageBinary();
+
+
+                getURL();
+
+
+                getSourceDetails();
+
+
+                getDestinationDetails();
+
+
+                generatePort();
+
+
+                transportLayer();
+
+
+                createSegment();
+
+
+                networkLayer();
+
+
+                //ipToBinary(srcIP,srcIPBinary);
+
+
+                //hexBinary(hexChar);
+
+
+                //macToBinary(srcMAC, srcMACBinary);
+
+
+                createPacket();
+
+
+                dataLinkLayer();
+
+
+                createFrame();
+
+
+                displayFrame();
+
+
+                packetFormation();
+
+
+                frameFormation();
+
+
+                break;
+
+
+
+            case 6:
+
+                printf("\nProgram Terminated\n");
+
+                exit(0);
+
+
+
+            default:
+
+                printf("\nInvalid Choice\n");
+
+        }
+
+    }
+
+
+    return 0;
+}
