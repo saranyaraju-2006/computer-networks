@@ -1,0 +1,23 @@
+#include <stdio.h>
+#include <stdlib.h>
+
+int* countBits(int n, int* returnSize) {
+    // 1. Allocate memory for n + 1 elements
+    int* ans = (int*)malloc((n + 1) * sizeof(int));
+    if (ans == NULL) {
+        *returnSize = 0;
+        return NULL;
+    }
+
+    // 2. Base case
+    ans[0] = 0;
+
+    // 3. Populate array using recurrence relation
+    for (int i = 1; i <= n; i++) {
+        ans[i] = ans[i >> 1] + (i & 1);
+    }
+
+    // 4. Set the return size for the caller
+    *returnSize = n + 1;
+    return ans;
+}
