@@ -1,0 +1,13 @@
+int hammingDistance(int x, int y) {
+    // 1. XOR the two numbers to find where the bits differ
+    int xorResult = x ^ y;
+    int distance = 0;
+    
+    // 2. Count the number of set bits (1s) using Brian Kernighan's Algorithm
+    while (xorResult > 0) {
+        xorResult = xorResult & (xorResult - 1); // Clears the lowest set bit
+        distance++;
+    }
+    
+    return distance;
+}
