@@ -1,0 +1,63 @@
+#include <stdlib.h>
+
+// 1. Declare the function first so the compiler knows it exists
+int subarrayBitwiseORs(int* arr, int arrSize);
+
+// 2. Put your helper comparison function
+int compare(const void *a, const void *b) {
+    return (*(int*)a - *(int*)b);
+}
+
+// 3. Implement the main function LeetCode is looking for
+int subarrayBitwiseORs(int* arr, int arrSize) {
+    int* totalRes = (int*)malloc(1000000 * sizeof(int)); 
+    int totalCount = 0;
+    
+    int prevOrs[33]; // Fixed syntax error from previous draft
+    int prevSize = 0;
+    
+    for (int i = 0; i < arrSize; i++) {
+        int currOrs[33]; // Fixed syntax error from previous draft
+        int currSize = 0;
+        
+        currOrs[currSize++] = arr[i];
+        
+        for (int j = 0; j < prevSize; j++) {
+            int newVal = prevOrs[j] | arr[i];
+            
+            int exists = 0;
+            for (int k = 0; k < currSize; k++) {
+                if (currOrs[k] == newVal) {
+                    exists = 1;
+                    break;
+                }
+            }
+            if (!exists) {
+                currOrs[currSize++] = newVal;
+            }
+        }
+        
+        for (int j = 0; j < currSize; j++) {
+            totalRes[totalCount++] = currOrs[j];
+            prevOrs[j] = currOrs[j]; 
+        }
+        prevSize = currSize;
+    }
+    
+    if (totalCount == 0) {
+        free(totalRes);
+        return 0;
+    }
+    
+    qsort(totalRes, totalCount, sizeof(int), compare);
+    
+    int uniqueCount = 1;
+    for (int i = 1; i < totalCount; i++) {
+        if (totalRes[i] != totalRes[i - 1]) {
+            uniqueCount++;
+        }
+    }
+    
+    free(totalRes);
+    return uniqueCount;
+}
