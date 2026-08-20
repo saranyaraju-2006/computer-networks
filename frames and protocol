@@ -1,0 +1,1219 @@
+#ifndef DECLARATIONS_H
+#define DECLARATIONS_H
+
+#include<stdio.h>
+#include<stdlib.h>
+#include<string.h>
+#include<time.h>
+
+#define TABLE_SIZE 20
+
+#define MAX_URL 100
+#define MAX_IP 20
+#define MAX_MAC 20
+
+#define MAX_MESSAGE 1000
+#define MAX_PACKET_SIZE 64
+#define MAX_FRAME_SIZE 32
+
+#define MAX_PACKETS 100
+#define MAX_FRAMES 200
+
+#define MAX_BINARY 100000
+
+#define STX 0x02
+#define ETX 0x03
+
+/*=========================
+    HASH TABLE
+==========================*/
+
+typedef struct
+{
+    char url[MAX_URL];
+    char ip[MAX_IP];
+    char mac[MAX_MAC];
+    int status;
+
+}HashNode;
+
+
+/*=========================
+ APPLICATION LAYER
+==========================*/
+
+typedef struct
+{
+    int H5;
+
+    char message[MAX_MESSAGE];
+
+    int messageLength;
+
+    int bytes;
+
+    int bits;
+
+}ApplicationPacket;
+
+
+/*=========================
+ TRANSPORT LAYER
+==========================*/
+
+typedef struct
+{
+    int H4;
+
+    int sourcePort;
+
+    int destinationPort;
+
+    int packetNumber;
+
+    int packetSize;
+
+    int packetCount;
+
+    char data[MAX_PACKET_SIZE];
+
+    char binary[MAX_BINARY];
+
+}TransportPacket;
+
+
+/*=========================
+ NETWORK LAYER
+==========================*/
+
+typedef struct
+{
+    int H3;
+
+    char sourceIP[MAX_IP];
+
+    char destinationIP[MAX_IP];
+
+}NetworkPacket;
+
+
+/*=========================
+ DATA LINK LAYER
+==========================*/
+
+typedef struct
+{
+    int H2;
+
+    char sourceMAC[MAX_MAC];
+
+    char destinationMAC[MAX_MAC];
+
+    char trailer[17];
+
+    char frame[MAX_FRAME_SIZE];
+
+    int frameNumber;
+
+    int frameSize;
+
+    int totalFrames;
+
+}Frame;
+
+
+/*=========================
+ RECEIVER
+==========================*/
+
+typedef struct
+{
+    char receivedMessage[MAX_MESSAGE];
+
+}Receiver;
+
+
+/*=========================
+ GLOBAL VARIABLES
+==========================*/
+
+extern HashNode hashTable[TABLE_SIZE];
+
+extern ApplicationPacket application;
+
+extern TransportPacket transport[MAX_PACKETS];
+
+extern NetworkPacket network;
+
+extern Frame frames[MAX_FRAMES];
+
+extern Receiver receiver;
+
+#endif
+#include "declarations.h"
+
+/*==========================
+    Global Hash Table
+===========================*/
+
+HashNode hashTable[TABLE_SIZE];
+
+/*==========================
+    Initialize Hash Table
+===========================*/
+
+void initializeHash()
+{
+    int i;
+
+    for(i=0;i<TABLE_SIZE;i++)
+    {
+        hashTable[i].status=0;
+
+        strcpy(hashTable[i].url,"");
+
+        strcpy(hashTable[i].ip,"");
+
+        strcpy(hashTable[i].mac,"");
+    }
+}
+
+/*==========================
+    Hash Function
+===========================*/
+
+int hashFunction(char url[])
+{
+    int i;
+
+    int sum=0;
+
+    for(i=0;url[i]!='\0';i++)
+    {
+        sum=sum+url[i];
+    }
+
+    return(sum%TABLE_SIZE);
+}
+
+/*==========================
+    Insert Record
+===========================*/
+
+void insertRecord(char url[],char ip[],char mac[])
+{
+    int index;
+
+    int start;
+
+    index=hashFunction(url);
+
+    start=index;
+
+    while(hashTable[index].status==1)
+    {
+        index=(index+1)%TABLE_SIZE;
+
+        if(index==start)
+        {
+            printf("\nHash Table Full.\n");
+            return;
+        }
+    }
+
+    strcpy(hashTable[index].url,url);
+
+    strcpy(hashTable[index].ip,ip);
+
+    strcpy(hashTable[index].mac,mac);
+
+    hashTable[index].status=1;
+
+    printf("\nRecord Inserted Successfully.\n");
+}
+
+/*==========================
+    Search Record
+===========================*/
+
+int searchRecord(char url[],char ip[],char mac[])
+{
+    int index;
+
+    int start;
+
+    index=hashFunction(url);
+
+    start=index;
+
+    while(hashTable[index].status!=0)
+    {
+        if(hashTable[index].status==1 &&
+           strcmp(hashTable[index].url,url)==0)
+        {
+            strcpy(ip,hashTable[index].ip);
+
+            strcpy(mac,hashTable[index].mac);
+
+            return 1;
+        }
+
+        index=(index+1)%TABLE_SIZE;
+
+        if(index==start)
+            break;
+    }
+
+    return 0;
+}
+
+/*==========================
+    Delete Record
+===========================*/
+
+void deleteRecord(char url[])
+{
+    int index;
+
+    int start;
+
+    index=hashFunction(url);
+
+    start=index;
+
+    while(hashTable[index].status!=0)
+    {
+        if(hashTable[index].status==1 &&
+           strcmp(hashTable[index].url,url)==0)
+        {
+            hashTable[index].status=2;
+
+            strcpy(hashTable[index].url,"");
+
+            strcpy(hashTable[index].ip,"");
+
+            strcpy(hashTable[index].mac,"");
+
+            printf("\nRecord Deleted Successfully.\n");
+
+            return;
+        }
+
+        index=(index+1)%TABLE_SIZE;
+
+        if(index==start)
+            break;
+    }
+
+    printf("\nURL Not Found.\n");
+}
+
+/*==========================
+    Display Hash Table
+===========================*/
+
+void displayHash()
+{
+    int i;
+
+    printf("\n==========================================================================");
+
+    printf("\nIndex\tURL\t\t\tIP Address\t\tMAC Address");
+
+    printf("\n==========================================================================");
+
+    for(i=0;i<TABLE_SIZE;i++)
+    {
+        if(hashTable[i].status==1)
+        {
+            printf("\n%d\t%-20s\t%-15s\t%s",
+                   i,
+                   hashTable[i].url,
+                   hashTable[i].ip,
+                   hashTable[i].mac);
+        }
+    }
+
+    printf("\n==========================================================================\n");
+}
+
+/*==========================
+    Load Default Records
+===========================*/
+
+void loadDefaultRecords()
+{
+    insertRecord("www.google.com",
+                 "192.168.1.10",
+                 "00:11:22:33:44:55");
+
+    insertRecord("www.youtube.com",
+                 "192.168.1.20",
+                 "AA:BB:CC:DD:EE:11");
+
+    insertRecord("www.amazon.com",
+                 "192.168.1.30",
+                 "12:23:34:45:56:67");
+
+    insertRecord("www.facebook.com",
+                 "192.168.1.40",
+                 "90:80:70:60:50:40");
+
+    insertRecord("www.gmail.com",
+                 "192.168.1.50",
+                 "01:02:03:04:05:06");
+}
+#include "declarations.h"
+
+/*==========================================
+    Global Application Layer Variable
+==========================================*/
+
+ApplicationPacket application;
+
+/*==========================================
+    Read Message From File
+==========================================*/
+
+void readMessage()
+{
+    FILE *fp;
+
+    fp = fopen("message.txt", "r");
+
+    if(fp == NULL)
+    {
+        printf("\nUnable to Open message.txt\n");
+        exit(0);
+    }
+
+    fgets(application.message, MAX_MESSAGE, fp);
+
+    fclose(fp);
+
+    application.message[strcspn(application.message, "\n")] = '\0';
+}
+
+/*==========================================
+    Calculate Message Size
+==========================================*/
+
+void calculateMessageSize()
+{
+    application.messageLength = strlen(application.message);
+
+    application.bytes = application.messageLength;
+
+    application.bits = application.bytes * 8;
+}
+
+/*==========================================
+    Generate Application Header
+==========================================*/
+
+void generateApplicationHeader()
+{
+    srand(time(NULL));
+
+    application.H5 = 1000 + rand() % 9000;
+}
+
+/*==========================================
+    Display Application Layer
+==========================================*/
+
+void displayApplicationLayer()
+{
+    printf("\n");
+    printf("=====================================================\n");
+    printf("            APPLICATION LAYER (L5)\n");
+    printf("=====================================================\n");
+
+    printf("Application Header (H5) : %d\n", application.H5);
+
+    printf("Message                 : %s\n", application.message);
+
+    printf("Characters              : %d\n", application.messageLength);
+
+    printf("Data Size               : %d Bytes\n", application.bytes);
+
+    printf("Binary Size             : %d Bits\n", application.bits);
+
+    printf("=====================================================\n");
+}
+
+/*==========================================
+    Application Layer
+==========================================*/
+
+void applicationLayer()
+{
+    readMessage();
+
+    calculateMessageSize();
+
+    generateApplicationHeader();
+
+    displayApplicationLayer();
+}
+#include "declarations.h"
+
+/*=========================================
+        Global Variables
+=========================================*/
+
+TransportPacket transport[MAX_PACKETS];
+
+/*=========================================
+        Generate H4 Header
+=========================================*/
+
+void generateTransportHeader()
+{
+    srand(time(NULL));
+
+    transport[0].H4 = 1000 + rand() % 9000;
+}
+
+/*=========================================
+      Generate Source and Destination Ports
+=========================================*/
+
+void generatePorts()
+{
+    transport[0].sourcePort = 1024 + rand() % 5000;
+
+    transport[0].destinationPort = 1024 + rand() % 5000;
+}
+
+/*=========================================
+      Calculate Number of Packets
+=========================================*/
+
+void calculatePackets()
+{
+    int length;
+
+    length = application.bytes;
+
+    transport[0].packetCount =
+        (length + MAX_PACKET_SIZE - 1) / MAX_PACKET_SIZE;
+}
+
+/*=========================================
+        Create Packets
+=========================================*/
+
+void createPackets()
+{
+    int i;
+
+    int start = 0;
+
+    int length = application.bytes;
+
+    calculatePackets();
+
+    for(i=0;i<transport[0].packetCount;i++)
+    {
+        transport[i].packetNumber = i + 1;
+
+        transport[i].H4 = transport[0].H4;
+
+        transport[i].sourcePort =
+            transport[0].sourcePort;
+
+        transport[i].destinationPort =
+            transport[0].destinationPort;
+
+        strncpy(
+                transport[i].data,
+                application.message + start,
+                MAX_PACKET_SIZE
+              );
+
+        transport[i].data[MAX_PACKET_SIZE]='\0';
+
+        transport[i].packetSize =
+            strlen(transport[i].data);
+
+        start = start + MAX_PACKET_SIZE;
+
+        if(start >= length)
+            break;
+    }
+}
+
+/*=========================================
+        String to Binary
+=========================================*/
+
+void stringToBinary(char input[],char output[])
+{
+    int i;
+
+    int j;
+
+    int k = 0;
+
+    for(i=0;input[i]!='\0';i++)
+    {
+        for(j=7;j>=0;j--)
+        {
+            if((input[i]>>j)&1)
+                output[k++]='1';
+            else
+                output[k++]='0';
+        }
+    }
+
+    output[k]='\0';
+}
+
+/*=========================================
+        Convert Packet into Binary
+=========================================*/
+
+void convertPacketBinary()
+{
+    int i;
+
+    for(i=0;i<transport[0].packetCount;i++)
+    {
+        stringToBinary(
+                transport[i].data,
+                transport[i].binary
+                      );
+    }
+}
+
+/*=========================================
+        Display Transport Layer
+=========================================*/
+
+void displayTransportLayer()
+{
+    int i;
+
+    printf("\n");
+    printf("====================================================\n");
+    printf("              TRANSPORT LAYER (L4)\n");
+    printf("====================================================\n");
+
+    printf("H4 Header        : %d\n",
+            transport[0].H4);
+
+    printf("Source Port      : %d\n",
+            transport[0].sourcePort);
+
+    printf("Destination Port : %d\n",
+            transport[0].destinationPort);
+
+    printf("Total Packets    : %d\n",
+            transport[0].packetCount);
+
+    printf("====================================================\n");
+
+    for(i=0;i<transport[0].packetCount;i++)
+    {
+        printf("\nPacket Number : %d\n",
+                transport[i].packetNumber);
+
+        printf("Packet Size   : %d Bytes\n",
+                transport[i].packetSize);
+
+        printf("Packet Data   : %s\n",
+                transport[i].data);
+
+        printf("Binary Data\n");
+
+        printf("%s\n",
+                transport[i].binary);
+
+        printf("--------------------------------------------\n");
+    }
+}
+
+/*=========================================
+        Transport Layer
+=========================================*/
+
+void transportLayer()
+{
+    generateTransportHeader();
+
+    generatePorts();
+
+    createPackets();
+
+    convertPacketBinary();
+
+    displayTransportLayer();
+}
+#include "declarations.h"
+
+/*=========================================
+        Global Variable
+=========================================*/
+
+NetworkPacket network;
+
+/*=========================================
+        Generate Network Header
+=========================================*/
+
+void generateNetworkHeader()
+{
+    srand(time(NULL));
+
+    network.H3 = 1000 + rand() % 9000;
+}
+
+/*=========================================
+      Set Source and Destination IP
+=========================================*/
+
+void setIPAddress(char sourceIP[],char destinationIP[])
+{
+    strcpy(network.sourceIP,sourceIP);
+
+    strcpy(network.destinationIP,destinationIP);
+}
+
+/*=========================================
+        Display Network Layer
+=========================================*/
+
+void displayNetworkLayer()
+{
+    int i;
+
+    printf("\n");
+    printf("=====================================================\n");
+    printf("              NETWORK LAYER (L3)\n");
+    printf("=====================================================\n");
+
+    printf("Network Header(H3) : %d\n",network.H3);
+
+    printf("Source IP          : %s\n",network.sourceIP);
+
+    printf("Destination IP     : %s\n",network.destinationIP);
+
+    printf("=====================================================\n");
+
+    for(i=0;i<transport[0].packetCount;i++)
+    {
+        printf("\nPacket Number : %d\n",
+               transport[i].packetNumber);
+
+        printf("Packet Size   : %d Bytes\n",
+               transport[i].packetSize);
+
+        printf("Source IP     : %s\n",
+               network.sourceIP);
+
+        printf("Destination IP: %s\n",
+               network.destinationIP);
+
+        printf("Packet Data   : %s\n",
+               transport[i].data);
+
+        printf("--------------------------------------------\n");
+    }
+}
+
+/*=========================================
+        Network Layer
+=========================================*/
+
+void networkLayer(char sourceIP[],char destinationIP[])
+{
+    generateNetworkHeader();
+
+    setIPAddress(sourceIP,destinationIP);
+
+    displayNetworkLayer();
+}
+#include "declarations.h"
+
+/*=====================================================
+        Global Variable
+======================================================*/
+
+Frame frames[MAX_FRAMES];
+
+DataLinkLayer datalink;
+
+/*=====================================================
+        Generate H2 Header
+======================================================*/
+
+void generateDataLinkHeader()
+{
+    srand(time(NULL));
+
+    datalink.H2 = 1000 + rand()%9000;
+}
+
+/*=====================================================
+        Set MAC Addresses
+======================================================*/
+
+void setMACAddress(char sourceMAC[],char destinationMAC[])
+{
+    strcpy(datalink.sourceMAC,sourceMAC);
+
+    strcpy(datalink.destinationMAC,destinationMAC);
+}
+
+/*=====================================================
+        Generate Trailer T2
+======================================================*/
+
+void generateTrailer()
+{
+    strcpy(datalink.trailer,"0000000000000000");
+}
+
+/*=====================================================
+        Calculate Frames
+======================================================*/
+
+void calculateFrames()
+{
+    int i;
+
+    int frameNo=1;
+
+    int totalFrames=0;
+
+    for(i=0;i<transport[0].packetCount;i++)
+    {
+        int size;
+
+        size=transport[i].packetSize;
+
+        totalFrames+=(size+MAX_FRAME_SIZE-1)/MAX_FRAME_SIZE;
+    }
+
+    datalink.totalFrames=totalFrames;
+
+    for(i=0;i<transport[0].packetCount;i++)
+    {
+        int remaining;
+
+        remaining=transport[i].packetSize;
+
+        while(remaining>0)
+        {
+            frames[frameNo-1].frameNumber=frameNo;
+
+            frames[frameNo-1].packetNumber=
+            transport[i].packetNumber;
+
+            if(remaining>=MAX_FRAME_SIZE)
+            {
+                frames[frameNo-1].frameSize=
+                MAX_FRAME_SIZE;
+            }
+            else
+            {
+                frames[frameNo-1].frameSize=
+                remaining;
+            }
+
+            remaining-=MAX_FRAME_SIZE;
+
+            frameNo++;
+        }
+    }
+}
+
+/*=====================================================
+        Create Frames
+======================================================*/
+
+void createFrames()
+{
+    int i;
+
+    int frameIndex=0;
+
+    for(i=0;i<transport[0].packetCount;i++)
+    {
+        int start=0;
+
+        while(start<transport[i].packetSize)
+        {
+            strncpy(frames[frameIndex].frame,
+                    transport[i].data+start,
+                    MAX_FRAME_SIZE);
+
+            frames[frameIndex].frame[MAX_FRAME_SIZE]='\0';
+
+            start+=MAX_FRAME_SIZE;
+
+            frameIndex++;
+        }
+    }
+}
+
+/*=====================================================
+        Display Frame Details
+======================================================*/
+
+void displayFrames()
+{
+    int i;
+
+    printf("\n");
+
+    printf("=============================================================\n");
+
+    printf("               DATA LINK LAYER (L2)\n");
+
+    printf("=============================================================\n");
+
+    printf("H2 Header           : %d\n",datalink.H2);
+
+    printf("Source MAC          : %s\n",
+            datalink.sourceMAC);
+
+    printf("Destination MAC     : %s\n",
+            datalink.destinationMAC);
+
+    printf("Trailer(T2)         : %s\n",
+            datalink.trailer);
+
+    printf("Total Frames        : %d\n",
+            datalink.totalFrames);
+
+    printf("=============================================================\n");
+
+    for(i=0;i<datalink.totalFrames;i++)
+    {
+        printf("\nFrame Number        : %d\n",
+                frames[i].frameNumber);
+
+        printf("Belongs to Packet   : %d\n",
+                frames[i].packetNumber);
+
+        printf("Frame Size          : %d Bytes\n",
+                frames[i].frameSize);
+
+        printf("Frame Data          : %s\n",
+                frames[i].frame);
+
+        printf("----------------------------------------------\n");
+    }
+}
+
+/*=====================================================
+        Data Link Layer
+======================================================*/
+
+void dataLinkLayer(char sourceMAC[],
+                   char destinationMAC[])
+{
+    generateDataLinkHeader();
+
+    setMACAddress(sourceMAC,
+                  destinationMAC);
+
+    generateTrailer();
+
+    calculateFrames();
+
+    createFrames();
+
+    displayFrames();
+}
+typedef struct
+{
+    char frame[MAX_BINARY];
+
+}SentinelFrame;
+
+extern SentinelFrame sentinelFrame[MAX_FRAMES];
+/*==============================================
+        Sentinel Sender
+===============================================*/
+
+void sentinelSender()
+{
+    int i;
+
+    char temp[MAX_BINARY];
+
+    for(i=0;i<datalink.totalFrames;i++)
+    {
+        strcpy(temp,"");
+
+        strcat(temp,"<STX>");
+
+        strcat(temp,"|H2:");
+
+        sprintf(temp+strlen(temp),"%d",datalink.H2);
+
+        strcat(temp,"|");
+
+        strcat(temp,datalink.sourceMAC);
+
+        strcat(temp,"|");
+
+        strcat(temp,datalink.destinationMAC);
+
+        strcat(temp,"|H3:");
+
+        sprintf(temp+strlen(temp),"%d",network.H3);
+
+        strcat(temp,"|H4:");
+
+        sprintf(temp+strlen(temp),"%d",transport[0].H4);
+
+        strcat(temp,"|H5:");
+
+        sprintf(temp+strlen(temp),"%d",application.H5);
+
+        strcat(temp,"|");
+
+        strcat(temp,frames[i].frame);
+
+        strcat(temp,"|");
+
+        strcat(temp,datalink.trailer);
+
+        strcat(temp,"<ETX>");
+
+        strcpy(sentinelFrame[i].frame,temp);
+    }
+
+    printf("\n");
+    printf("===============================================\n");
+    printf("     SENTINEL FRAMING - SENDER\n");
+    printf("===============================================\n");
+
+    for(i=0;i<datalink.totalFrames;i++)
+    {
+        printf("\nFrame %d\n",i+1);
+
+        printf("%s\n",sentinelFrame[i].frame);
+
+        printf("---------------------------------------\n");
+    }
+}
+
+/*==============================================
+        Sentinel Receiver
+===============================================*/
+
+void sentinelReceiver()
+{
+    int i;
+
+    char *start;
+
+    char *end;
+
+    char data[MAX_BINARY];
+
+    printf("\n");
+    printf("===============================================\n");
+    printf("     SENTINEL FRAMING - RECEIVER\n");
+    printf("===============================================\n");
+
+    for(i=0;i<datalink.totalFrames;i++)
+    {
+        start=strstr(sentinelFrame[i].frame,"<STX>");
+
+        end=strstr(sentinelFrame[i].frame,"<ETX>");
+
+        if(start!=NULL && end!=NULL)
+        {
+            start+=5;
+
+            strncpy(data,start,end-start);
+
+            data[end-start]='\0';
+
+            printf("\nFrame %d Received\n",i+1);
+
+            printf("%s\n",data);
+
+            printf("---------------------------------------\n");
+        }
+    }
+}
+/*==============================================
+        Byte Count Sender
+===============================================*/
+
+void byteCountSender()
+{
+    int i;
+
+    char temp[MAX_BINARY];
+
+    for(i=0;i<datalink.totalFrames;i++)
+    {
+        strcpy(temp,"");
+
+        strcat(temp,"H2:");
+
+        sprintf(temp+strlen(temp),"%d",datalink.H2);
+
+        strcat(temp,"|");
+
+        strcat(temp,datalink.sourceMAC);
+
+        strcat(temp,"|");
+
+        strcat(temp,datalink.destinationMAC);
+
+        strcat(temp,"|H3:");
+
+        sprintf(temp+strlen(temp),"%d",network.H3);
+
+        strcat(temp,"|H4:");
+
+        sprintf(temp+strlen(temp),"%d",transport[0].H4);
+
+        strcat(temp,"|H5:");
+
+        sprintf(temp+strlen(temp),"%d",application.H5);
+
+        strcat(temp,"|");
+
+        strcat(temp,frames[i].frame);
+
+        strcat(temp,"|");
+
+        strcat(temp,datalink.trailer);
+
+        byteFrame[i].byteCount=strlen(temp);
+
+        strcpy(byteFrame[i].frame,temp);
+    }
+
+    printf("\n");
+    printf("=====================================================\n");
+    printf("          BYTE COUNT FRAMING - SENDER\n");
+    printf("=====================================================\n");
+
+    for(i=0;i<datalink.totalFrames;i++)
+    {
+        printf("\nFrame %d\n",i+1);
+
+        printf("Byte Count : %d\n",byteFrame[i].byteCount);
+
+        printf("%s\n",byteFrame[i].frame);
+
+        printf("----------------------------------------------\n");
+    }
+}
+/*==============================================
+        Byte Count Receiver
+===============================================*/
+
+void byteCountReceiver()
+{
+    int i;
+
+    printf("\n");
+    printf("=====================================================\n");
+    printf("          BYTE COUNT FRAMING - RECEIVER\n");
+    printf("=====================================================\n");
+
+    for(i=0;i<datalink.totalFrames;i++)
+    {
+        printf("\nFrame %d\n",i+1);
+
+        printf("Received Byte Count : %d\n",
+               byteFrame[i].byteCount);
+
+        printf("Frame Data :\n");
+
+        printf("%s\n",byteFrame[i].frame);
+
+        printf("----------------------------------------------\n");
+    }
+}
+#include "declarations.h"
+
+/*=========================================================
+        Physical Layer
+=========================================================*/
+
+void physicalLayer()
+{
+    int i;
+
+    printf("\n");
+    printf("=====================================================\n");
+    printf("             PHYSICAL LAYER (L1)\n");
+    printf("=====================================================\n");
+
+    printf("\nTransmission Started...\n");
+
+    for(i=0;i<transport[0].packetCount;i++)
+    {
+        printf("\n--------------------------------------------\n");
+
+        printf("Packet Number : %d\n",
+               transport[i].packetNumber);
+
+        printf("Binary Data :\n");
+
+        printf("%s\n",transport[i].binary);
+
+        printf("--------------------------------------------\n");
+    }
+
+    printf("\nAll Packets Successfully Transmitted.\n");
+
+    printf("=====================================================\n");
+}
+void transmitFrames()
+{
+    int i;
+
+    printf("\n");
+    printf("=====================================================\n");
+    printf("          FRAME TRANSMISSION\n");
+    printf("=====================================================\n");
+
+    for(i=0;i<datalink.totalFrames;i++)
+    {
+        printf("\nFrame Number : %d\n",
+               frames[i].frameNumber);
+
+        printf("Belongs to Packet : %d\n",
+               frames[i].packetNumber);
+
+        printf("Frame Data :\n");
+
+        printf("%s\n",frames[i].frame);
+
+        printf("-------------------------------------------\n");
+    }
+
+    printf("\nTransmission Completed.\n");
+}
+void sendToReceiver()
+{
+    printf("\n");
+
+    printf("Sender -------------> Receiver\n");
+
+    printf("Binary Stream Sent Successfully.\n");
+}
+void physicalLayer()
+{
+    displayPhysicalLayer();
+
+    transmitFrames();
+
+    transmitBinary();
+
+    sendToReceiver();
+}
