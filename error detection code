@@ -1,0 +1,1656 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+
+/*=============================
+    CONSTANTS & DEFINITIONS
+=============================*/
+#define HASH_SIZE 10
+#define MAX_MESSAGE 1000
+#define MAX_PACKET_SIZE 10
+#define MAX_FRAME_SIZE 5
+#define MAX_PACKETS 100
+#define MAX_FRAMES 200
+
+struct HashEntry {
+    char url[100];
+    char ip[20];
+    char mac[20];
+};
+
+struct Packet {
+    int packetNumber;
+    struct {
+        int sourcePort;
+        int destinationPort;
+    } transport;
+    struct {
+        char sourceIP[20];
+        char destinationIP[20];
+    } network;
+    char data[MAX_PACKET_SIZE + 1];
+};
+
+struct Frame {
+    int frameNumber;
+    int packetNumber;
+    struct {
+        char sourceMAC[20];
+        char destinationMAC[20];
+    } datalink;
+    char data[MAX_FRAME_SIZE + 1];
+};
+
+/*=============================
+        GLOBAL VARIABLES
+=============================*/
+struct HashEntry hashTable[HASH_SIZE];
+char sourceIP[20] = "";
+char sourceMAC[20] = "";
+char destinationIP[20] = "";
+char destinationMAC[20] = "";
+int sourcePort = 0;
+int destinationPort = 0;
+
+char senderURL[100] = "";
+char receiverURL[100] = "";
+
+char message[MAX_MESSAGE] = "";
+char binaryMessage[MAX_MESSAGE * 9] = "";
+
+struct Packet packets[MAX_PACKETS];
+int totalPackets = 0;
+
+struct Frame frames[MAX_FRAMES];
+int totalFrames = 0;
+
+/* Global arrays for binary frames and error-checking results */
+char binaryFrames[MAX_FRAMES][MAX_FRAME_SIZE * 8 + 1];
+char frameEvenParity[MAX_FRAMES];
+char frameOddParity[MAX_FRAMES];
+char frameCRC[MAX_FRAMES][10];
+unsigned short frameChecksum[MAX_FRAMES];
+
+int errorFlag = 0; // 0 = No error, 1 = Error simulated
+char receivedMessage[MAX_MESSAGE] = "";
+
+/*=============================
+    Initialize Hash Table
+=============================*/
+
+void initializeHashTable()
+{
+    int i;
+
+    /* Initialize all entries as empty */
+    for(i = 0; i < HASH_SIZE; i++)
+    {
+        strcpy(hashTable[i].url, "");
+        strcpy(hashTable[i].ip, "");
+        strcpy(hashTable[i].mac, "");
+    }
+
+    /* Default Records */
+
+    strcpy(hashTable[0].url, "www.google.com");
+    strcpy(hashTable[0].ip, "142.250.183.206");
+    strcpy(hashTable[0].mac, "AA:BB:CC:11:22:33");
+
+    strcpy(hashTable[1].url, "www.youtube.com");
+    strcpy(hashTable[1].ip, "142.250.193.78");
+    strcpy(hashTable[1].mac, "AA:BB:CC:44:55:66");
+
+    strcpy(hashTable[2].url, "www.facebook.com");
+    strcpy(hashTable[2].ip, "157.240.22.35");
+    strcpy(hashTable[2].mac, "AA:BB:CC:77:88:99");
+
+    strcpy(hashTable[3].url, "www.instagram.com");
+    strcpy(hashTable[3].ip, "157.240.18.174");
+    strcpy(hashTable[3].mac, "11:22:33:44:55:66");
+
+    strcpy(hashTable[4].url, "www.amazon.com");
+    strcpy(hashTable[4].ip, "205.251.242.103");
+    strcpy(hashTable[4].mac, "22:33:44:55:66:77");
+
+    strcpy(hashTable[5].url, "www.wikipedia.org");
+    strcpy(hashTable[5].ip, "208.80.154.224");
+    strcpy(hashTable[5].mac, "33:44:55:66:77:88");
+
+    strcpy(hashTable[6].url, "www.microsoft.com");
+    strcpy(hashTable[6].ip, "20.84.181.62");
+    strcpy(hashTable[6].mac, "44:55:66:77:88:99");
+
+    strcpy(hashTable[7].url, "www.github.com");
+    strcpy(hashTable[7].ip, "140.82.114.4");
+    strcpy(hashTable[7].mac, "55:66:77:88:99:AA");
+
+    strcpy(hashTable[8].url, "www.linkedin.com");
+    strcpy(hashTable[8].ip, "108.174.10.10");
+    strcpy(hashTable[8].mac, "66:77:88:99:AA:BB");
+
+    strcpy(hashTable[9].url, "www.chatgpt.com");
+    strcpy(hashTable[9].ip, "104.18.33.45");
+    strcpy(hashTable[9].mac, "77:88:99:AA:BB:CC");
+
+    printf("\n========================================");
+    printf("\n HASH TABLE INITIALIZED SUCCESSFULLY");
+    printf("\n========================================\n");
+
+    printf("%-5s %-25s %-18s %-20s\n",
+           "No", "URL", "IP Address", "MAC Address");
+
+    printf("--------------------------------------------------------------------------\n");
+
+    for(i = 0; i < HASH_SIZE; i++)
+    {
+        printf("%-5d %-25s %-18s %-20s\n",
+               i + 1,
+               hashTable[i].url,
+               hashTable[i].ip,
+               hashTable[i].mac);
+    }
+
+    printf("--------------------------------------------------------------------------\n");
+}
+/*=========================================
+      SEARCH URL IN HASH TABLE
+=========================================*/
+
+int searchRecord()
+{
+    char searchURL[100];
+    int i;
+
+    printf("\n====================================");
+    printf("\n SEARCH URL");
+    printf("\n====================================");
+
+    printf("\nEnter URL : ");
+    scanf("%s", searchURL);
+
+    for(i = 0; i < HASH_SIZE; i++)
+    {
+        if(strcmp(hashTable[i].url, searchURL) == 0)
+        {
+            strcpy(senderURL, searchURL); /* Keep track of sender URL for summary */
+            strcpy(sourceIP, hashTable[i].ip);
+            strcpy(sourceMAC, hashTable[i].mac);
+
+            printf("\n\nURL FOUND SUCCESSFULLY");
+
+            printf("\n------------------------------------------");
+            printf("\nURL         : %s", hashTable[i].url);
+            printf("\nIP Address  : %s", sourceIP);
+            printf("\nMAC Address : %s", sourceMAC);
+            printf("\n------------------------------------------");
+
+            return 1;
+        }
+    }
+
+    printf("\n\nERROR : URL NOT FOUND IN HASH TABLE.");
+
+    return 0;
+}
+/*=========================================
+        READ MESSAGE FROM FILE
+=========================================*/
+
+void readMessageFromFile()
+{
+    FILE *fp;
+    int i;
+    int size = 0;
+
+    fp = fopen("input.txt", "r");
+
+    if(fp == NULL)
+    {
+        printf("\nError : Cannot Open input.txt\n");
+        exit(0);
+    }
+
+    i = 0;
+
+    while((message[i] = fgetc(fp)) != EOF)
+    {
+        i++;
+    }
+
+    message[i] = '\0';
+
+    fclose(fp);
+
+    size = strlen(message);
+
+    printf("\n==========================================");
+    printf("\n        APPLICATION LAYER");
+    printf("\n==========================================");
+
+    printf("\n\nMessage Read Successfully From File\n");
+
+    printf("\n------------------------------------------");
+    printf("\nOriginal Message");
+    printf("\n------------------------------------------");
+    printf("\n%s", message);
+
+    printf("\n\n------------------------------------------");
+    printf("\nMessage Statistics");
+    printf("\n------------------------------------------");
+    printf("\nTotal Characters : %d", size);
+    printf("\nMessage Size      : %d Bytes", size);
+    printf("\nMessage Size      : %d Bits", size * 8);
+
+    printf("\n==========================================\n");
+}
+/*=========================================
+        MESSAGE TO BINARY
+=========================================*/
+
+void messageToBinary()
+{
+    int i, j;
+    int len;
+    unsigned char ch;
+    int k = 0;
+
+    len = strlen(message);
+
+    printf("\n==========================================");
+    printf("\n        PHYSICAL LAYER");
+    printf("\n==========================================");
+
+    printf("\n\nASCII TO BINARY CONVERSION\n");
+
+    printf("\n--------------------------------------------------------------");
+    printf("\nCharacter\tASCII\t\tBinary");
+    printf("\n--------------------------------------------------------------");
+
+    for(i = 0; i < len; i++)
+    {
+        ch = message[i];
+
+        printf("\n   %c\t\t%d\t\t", ch, ch);
+
+        for(j = 7; j >= 0; j--)
+        {
+            if((ch >> j) & 1)
+            {
+                printf("1");
+                binaryMessage[k++] = '1';
+            }
+            else
+            {
+                printf("0");
+                binaryMessage[k++] = '0';
+            }
+        }
+
+        binaryMessage[k++] = ' ';
+    }
+
+    binaryMessage[k] = '\0';
+
+    printf("\n\n==========================================");
+    printf("\nComplete Binary Message");
+    printf("\n==========================================\n");
+
+    printf("%s\n", binaryMessage);
+
+    printf("\nBinary Length : %d Bits", k - (len - 1));
+
+    printf("\n==========================================\n");
+}
+/*=========================================
+        IP ADDRESS TO BINARY
+=========================================*/
+
+void ipToBinary()
+{
+    int i = 0;
+    int j;
+    int value;
+    char temp[5];
+    char binaryIP[40];
+
+    binaryIP[0] = '\0';
+
+    printf("\n==========================================");
+    printf("\n      NETWORK LAYER");
+    printf("\n==========================================");
+
+    printf("\nIP Address : %s\n", sourceIP);
+
+    printf("\nDecimal\t\tBinary");
+    printf("\n-----------------------------");
+
+    while(sourceIP[i] != '\0')
+    {
+        int k = 0;
+
+        while(sourceIP[i] != '.' && sourceIP[i] != '\0')
+        {
+            temp[k++] = sourceIP[i];
+            i++;
+        }
+
+        temp[k] = '\0';
+
+        value = atoi(temp);
+
+        printf("\n%3d\t\t", value);
+
+        for(j = 7; j >= 0; j--)
+        {
+            if((value >> j) & 1)
+            {
+                printf("1");
+                strcat(binaryIP, "1");
+            }
+            else
+            {
+                printf("0");
+                strcat(binaryIP, "0");
+            }
+        }
+
+        strcat(binaryIP, " ");
+
+        if(sourceIP[i] == '.')
+            i++;
+    }
+
+    printf("\n\n------------------------------------------");
+    printf("\nComplete 32-Bit Binary IP");
+    printf("\n------------------------------------------");
+    printf("\n%s", binaryIP);
+
+    printf("\n==========================================\n");
+}
+/*=========================================
+        MAC ADDRESS TO BINARY
+=========================================*/
+
+void macToBinary()
+{
+    int i = 0;
+    int j;
+    int value;
+    char hex[3];
+    char binaryMAC[60];
+
+    binaryMAC[0] = '\0';
+
+    printf("\n==========================================");
+    printf("\n        DATA LINK LAYER");
+    printf("\n==========================================");
+
+    printf("\nMAC Address : %s\n", sourceMAC);
+
+    printf("\nHexadecimal\tBinary");
+    printf("\n-----------------------------------------");
+
+    while(sourceMAC[i] != '\0')
+    {
+        int k = 0;
+
+        while(sourceMAC[i] != ':' && sourceMAC[i] != '\0')
+        {
+            hex[k++] = sourceMAC[i];
+            i++;
+        }
+
+        hex[k] = '\0';
+
+        value = (int)strtol(hex, NULL, 16);
+
+        printf("\n%s\t\t", hex);
+
+        for(j = 7; j >= 0; j--)
+        {
+            if((value >> j) & 1)
+            {
+                printf("1");
+                strcat(binaryMAC, "1");
+            }
+            else
+            {
+                printf("0");
+                strcat(binaryMAC, "0");
+            }
+        }
+
+        strcat(binaryMAC, " ");
+
+        if(sourceMAC[i] == ':')
+            i++;
+    }
+
+    printf("\n\n-----------------------------------------");
+    printf("\nComplete 48-Bit Binary MAC Address");
+    printf("\n-----------------------------------------");
+    printf("\n%s", binaryMAC);
+
+    printf("\n==========================================\n");
+}
+/*=========================================
+         TRANSPORT LAYER
+=========================================*/
+
+void transportLayer()
+{
+    sourcePort = (rand() % 50000) + 1024;
+
+    printf("\n==========================================");
+    printf("\n          TRANSPORT LAYER");
+    printf("\n==========================================");
+
+    printf("\nSource Port Generated Automatically.");
+
+    printf("\nEnter Destination Port : ");
+    scanf("%d",&destinationPort);
+
+    printf("\n------------------------------------------");
+    printf("\nTransport Header");
+    printf("\n------------------------------------------");
+
+    printf("\nSource Port      : %d", sourcePort);
+    printf("\nDestination Port : %d", destinationPort);
+
+    printf("\nSegment Created Successfully.");
+
+    printf("\n==========================================\n");
+}
+/*=========================================
+            NETWORK LAYER
+=========================================*/
+
+void networkLayer()
+{
+    int i, j;
+    int value;
+    char temp[5];
+    char destinationBinary[40];
+
+    destinationBinary[0] = '\0';
+
+    printf("\n==========================================");
+    printf("\n           NETWORK LAYER");
+    printf("\n==========================================");
+
+    printf("\nSource IP Address      : %s", sourceIP);
+
+    printf("\nEnter Destination IP   : ");
+    scanf("%s", destinationIP);
+
+    printf("\n------------------------------------------");
+    printf("\nIP HEADER");
+    printf("\n------------------------------------------");
+
+    printf("\nSource IP      : %s", sourceIP);
+    printf("\nDestination IP : %s", destinationIP);
+
+    printf("\n\nDestination IP Binary");
+
+    i = 0;
+
+    while(destinationIP[i] != '\0')
+    {
+        int k = 0;
+
+        while(destinationIP[i] != '.' && destinationIP[i] != '\0')
+        {
+            temp[k++] = destinationIP[i];
+            i++;
+        }
+
+        temp[k] = '\0';
+
+        value = atoi(temp);
+
+        printf("\n%3d  ->  ", value);
+
+        for(j = 7; j >= 0; j--)
+        {
+            if((value >> j) & 1)
+            {
+                printf("1");
+                strcat(destinationBinary, "1");
+            }
+            else
+            {
+                printf("0");
+                strcat(destinationBinary, "0");
+            }
+        }
+
+        strcat(destinationBinary, " ");
+
+        if(destinationIP[i] == '.')
+            i++;
+    }
+
+    printf("\n\n------------------------------------------");
+    printf("\nComplete Destination IP (32 Bits)");
+    printf("\n------------------------------------------");
+
+    printf("\n%s", destinationBinary);
+
+    printf("\n\nPacket Header Created Successfully.");
+
+    printf("\n==========================================\n");
+}
+/*=========================================
+            DATA LINK LAYER
+=========================================*/
+
+void dataLinkLayer()
+{
+    char destinationURL[100];
+    int i, found = 0;
+
+    printf("\n==========================================");
+    printf("\n           DATA LINK LAYER");
+    printf("\n==========================================");
+
+    printf("\nEnter Destination URL : ");
+    scanf("%s", destinationURL);
+    strcpy(receiverURL, destinationURL); /* Keep track of receiver URL for summary */
+
+    for(i = 0; i < HASH_SIZE; i++)
+    {
+        if(strcmp(hashTable[i].url, destinationURL) == 0)
+        {
+            strcpy(destinationIP, hashTable[i].ip);
+            strcpy(destinationMAC, hashTable[i].mac);
+
+            found = 1;
+            break;
+        }
+    }
+
+    if(found == 0)
+    {
+        printf("\nDestination URL Not Found.");
+        printf("\nFrame Creation Failed.");
+        exit(0);
+    }
+
+    printf("\n------------------------------------------");
+    printf("\nARP TABLE LOOKUP SUCCESSFUL");
+    printf("\n------------------------------------------");
+
+    printf("\nDestination URL : %s", destinationURL);
+    printf("\nDestination IP  : %s", destinationIP);
+    printf("\nDestination MAC : %s", destinationMAC);
+
+    printf("\n\n------------------------------------------");
+    printf("\nDATA LINK HEADER");
+    printf("\n------------------------------------------");
+
+    printf("\nSource MAC      : %s", sourceMAC);
+    printf("\nDestination MAC : %s", destinationMAC);
+
+    printf("\n\nFrame Header Created Successfully.");
+
+    printf("\n==========================================\n");
+}
+/*=========================================
+          CREATE PACKETS
+=========================================*/
+
+void createPackets()
+{
+    int i, j;
+    int length;
+    int start = 0;
+
+    length = strlen(message);
+
+    totalPackets = 0;
+
+    printf("\n==========================================");
+    printf("\n          PACKET CREATION");
+    printf("\n==========================================");
+
+    while(start < length)
+    {
+        packets[totalPackets].packetNumber = totalPackets + 1;
+
+        packets[totalPackets].transport.sourcePort = sourcePort;
+        packets[totalPackets].transport.destinationPort = destinationPort;
+
+        strcpy(packets[totalPackets].network.sourceIP, sourceIP);
+        strcpy(packets[totalPackets].network.destinationIP, destinationIP);
+
+        j = 0;
+
+        while(j < MAX_PACKET_SIZE && start < length)
+        {
+            packets[totalPackets].data[j] = message[start];
+            start++;
+            j++;
+        }
+
+        packets[totalPackets].data[j] = '\0';
+
+        totalPackets++;
+    }
+
+    printf("\nMessage Successfully Divided Into Packets.");
+
+    printf("\nTotal Message Size : %d Bytes", length);
+    printf("\nPacket Size        : %d Bytes", MAX_PACKET_SIZE);
+    printf("\nTotal Packets      : %d", totalPackets);
+
+    printf("\n\n==========================================");
+    printf("\n          PACKET DETAILS");
+    printf("\n==========================================");
+
+    for(i = 0; i < totalPackets; i++)
+    {
+        printf("\n------------------------------------------");
+        printf("\nPacket Number : %d", packets[i].packetNumber);
+
+        printf("\nSource Port      : %d",
+               packets[i].transport.sourcePort);
+
+        printf("\nDestination Port : %d",
+               packets[i].transport.destinationPort);
+
+        printf("\nSource IP        : %s",
+               packets[i].network.sourceIP);
+
+        printf("\nDestination IP   : %s",
+               packets[i].network.destinationIP);
+
+        printf("\nPacket Data      : %s",
+               packets[i].data);
+
+        printf("\nPacket Size      : %d Bytes",
+               (int)strlen(packets[i].data));
+    }
+
+    printf("\n==========================================\n");
+}
+/*=========================================
+            CREATE FRAMES
+=========================================*/
+
+void createFrames()
+{
+    int i, j;
+    int start;
+    int length;
+    int frameIndex = 0;
+
+    totalFrames = 0;
+
+    printf("\n==========================================");
+    printf("\n          FRAME CREATION");
+    printf("\n==========================================");
+
+    for(i = 0; i < totalPackets; i++)
+    {
+        length = strlen(packets[i].data);
+        start = 0;
+
+        while(start < length)
+        {
+            frames[frameIndex].frameNumber = frameIndex + 1;
+            frames[frameIndex].packetNumber = packets[i].packetNumber;
+
+            strcpy(frames[frameIndex].datalink.sourceMAC, sourceMAC);
+            strcpy(frames[frameIndex].datalink.destinationMAC, destinationMAC);
+
+            j = 0;
+
+            while(j < MAX_FRAME_SIZE && start < length)
+            {
+                frames[frameIndex].data[j] = packets[i].data[start];
+                start++;
+                j++;
+            }
+
+            frames[frameIndex].data[j] = '\0';
+
+            frameIndex++;
+            totalFrames++;
+        }
+    }
+
+    printf("\nFrames Created Successfully.");
+
+    printf("\nTotal Frames : %d", totalFrames);
+
+    printf("\n==========================================");
+    printf("\nFRAME DETAILS");
+    printf("\n==========================================");
+
+    for(i = 0; i < totalFrames; i++)
+    {
+        printf("\n------------------------------------------");
+
+        printf("\nFrame Number      : %d",
+               frames[i].frameNumber);
+
+        printf("\nBelongs to Packet : %d",
+               frames[i].packetNumber);
+
+        printf("\nSource MAC        : %s",
+               frames[i].datalink.sourceMAC);
+
+        printf("\nDestination MAC   : %s",
+               frames[i].datalink.destinationMAC);
+
+        printf("\nFrame Data        : %s",
+               frames[i].data);
+
+        printf("\nFrame Size        : %d Bytes",
+               (int)strlen(frames[i].data));
+    }
+
+    printf("\n==========================================");
+
+    printf("\n\nPacket -> Frame Mapping");
+
+    printf("\n------------------------------------------");
+
+    for(i = 0; i < totalFrames; i++)
+    {
+        printf("\nPacket %d  --->  Frame %d",
+               frames[i].packetNumber,
+               frames[i].frameNumber);
+    }
+
+    printf("\n==========================================\n");
+}
+
+/*=========================================
+      CONVERT FRAMES TO BINARY STRINGS
+=========================================*/
+
+void convertFramesToBinary()
+{
+    int i, j, bit;
+    int k;
+    unsigned char ch;
+
+    for(i = 0; i < totalFrames; i++)
+    {
+        k = 0;
+        int len = strlen(frames[i].data);
+        for(j = 0; j < len; j++)
+        {
+            ch = frames[i].data[j];
+            for(bit = 7; bit >= 0; bit--)
+            {
+                if((ch >> bit) & 1)
+                    binaryFrames[i][k++] = '1';
+                else
+                    binaryFrames[i][k++] = '0';
+            }
+        }
+        binaryFrames[i][k] = '\0';
+    }
+}
+
+/*=========================================
+      FLIP BIT IN FRAME DATA
+=========================================*/
+
+void updateFrameAfterBitFlip(int frameNo,int bitPosition)
+{
+    int bytePosition;
+    int bitInByte;
+    unsigned char ch;
+
+    if(frameNo<1 || frameNo>totalFrames)
+    {
+        printf("\nInvalid Frame Number");
+        return;
+    }
+
+    bytePosition = bitPosition / 8;
+    bitInByte = bitPosition % 8;
+
+    if(bytePosition >= strlen(frames[frameNo-1].data))
+    {
+        printf("\nBit Position Out of Range");
+        return;
+    }
+
+    ch = frames[frameNo-1].data[bytePosition];
+
+    /* Flip the required bit */
+    ch ^= (1 << (7-bitInByte));
+
+    frames[frameNo-1].data[bytePosition] = ch;
+
+    printf("\n==========================================");
+    printf("\nFRAME AFTER ERROR");
+    printf("\n==========================================");
+
+    printf("\nFrame Number : %d",frameNo);
+
+    printf("\nModified Frame Data : %s",
+            frames[frameNo-1].data);
+
+    printf("\nCharacter Changed To : %c",
+            ch);
+
+    printf("\n==========================================\n");
+}
+
+/*=========================================
+        ERROR SIMULATION
+=========================================*/
+
+void simulateError()
+{
+    int choice;
+    int packetNo;
+    int frameNo;
+    int bitPosition;
+
+    int i,j;
+    int length;
+    unsigned char ch;
+
+    char binaryFrame[100];
+    int k=0;
+
+    printf("\n==========================================");
+    printf("\n         ERROR SIMULATION");
+    printf("\n==========================================");
+
+    printf("\n1. Normal Transmission");
+    printf("\n2. Error Simulation");
+
+    printf("\n\nEnter Choice : ");
+    scanf("%d",&choice);
+
+    if(choice==1)
+    {
+        printf("\nNo Error Introduced.");
+        printf("\nFrames are transmitted successfully.");
+        return;
+    }
+
+    printf("\nEnter Packet Number : ");
+    scanf("%d",&packetNo);
+
+    printf("Enter Frame Number : ");
+    scanf("%d",&frameNo);
+
+    if(frameNo<1 || frameNo>totalFrames)
+    {
+        printf("\nInvalid Frame Number.");
+        return;
+    }
+
+    printf("Enter Bit Position : ");
+    scanf("%d",&bitPosition);
+
+    binaryFrame[0]='\0';
+    k=0;
+
+    length=strlen(frames[frameNo-1].data);
+
+    for(i=0;i<length;i++)
+    {
+        ch=frames[frameNo-1].data[i];
+
+        for(j=7;j>=0;j--)
+        {
+            if((ch>>j)&1)
+                binaryFrame[k++]='1';
+            else
+                binaryFrame[k++]='0';
+        }
+    }
+
+    binaryFrame[k]='\0';
+
+    printf("\n==========================================");
+    printf("\nORIGINAL FRAME BINARY");
+    printf("\n==========================================");
+
+    printf("\n%s\n",binaryFrame);
+
+    if(bitPosition<0 || bitPosition>=strlen(binaryFrame))
+    {
+        printf("\nInvalid Bit Position.");
+        return;
+    }
+
+    if(binaryFrame[bitPosition]=='0')
+        binaryFrame[bitPosition]='1';
+    else
+        binaryFrame[bitPosition]='0';
+
+    printf("\n==========================================");
+    printf("\nMODIFIED FRAME BINARY");
+    printf("\n==========================================");
+
+    printf("\n%s\n",binaryFrame);
+
+    printf("\n------------------------------------------");
+    printf("\nPacket Modified : %d",packetNo);
+    printf("\nFrame Modified  : %d",frameNo);
+    printf("\nBit Modified    : %d",bitPosition);
+
+    /* Update global records so both the raw frames and binary tracking suffer from the error */
+    strcpy(binaryFrames[frameNo - 1], binaryFrame);
+    updateFrameAfterBitFlip(frameNo, bitPosition);
+    errorFlag = 1;
+
+    printf("\n\nError Successfully Introduced.");
+
+    printf("\n==========================================\n");
+}
+/*=========================================
+            EVEN PARITY
+=========================================*/
+
+void evenParity()
+{
+    int i,j;
+    int ones;
+    char parity;
+
+    printf("\n==========================================");
+    printf("\n        EVEN PARITY CHECK");
+    printf("\n==========================================");
+
+    for(i=0;i<totalFrames;i++)
+    {
+        ones=0;
+
+        for(j=0;binaryFrames[i][j]!='\0';j++)
+        {
+            if(binaryFrames[i][j]=='1')
+                ones++;
+        }
+
+        if(ones%2==0)
+            parity='0';
+        else
+            parity='1';
+
+        frameEvenParity[i]=parity;
+
+        printf("\n------------------------------------------");
+        printf("\nFrame Number : %d",i+1);
+        printf("\nBinary Frame : %s",binaryFrames[i]);
+        printf("\nEven Parity Bit : %c",parity);
+    }
+
+    printf("\n==========================================");
+
+    printf("\n\nReceiver Side Verification");
+
+    for(i=0;i<totalFrames;i++)
+    {
+        ones=0;
+
+        for(j=0;binaryFrames[i][j]!='\0';j++)
+        {
+            if(binaryFrames[i][j]=='1')
+                ones++;
+        }
+
+        if(ones%2==0)
+            parity='0';
+        else
+            parity='1';
+
+        printf("\n------------------------------------------");
+        printf("\nFrame %d",i+1);
+
+        if(parity==frameEvenParity[i])
+            printf("\nStatus : No Error Detected");
+        else
+            printf("\nStatus : Error Detected");
+    }
+
+    printf("\n==========================================\n");
+}
+/*=========================================
+            ODD PARITY
+=========================================*/
+
+void oddParity()
+{
+    int i,j;
+    int ones;
+    char parity;
+
+    printf("\n==========================================");
+    printf("\n         ODD PARITY CHECK");
+    printf("\n==========================================");
+
+    /*--------------- Sender Side ----------------*/
+
+    for(i=0;i<totalFrames;i++)
+    {
+        ones=0;
+
+        for(j=0;binaryFrames[i][j]!='\0';j++)
+        {
+            if(binaryFrames[i][j]=='1')
+                ones++;
+        }
+
+        if(ones%2==0)
+            parity='1';
+        else
+            parity='0';
+
+        frameOddParity[i]=parity;
+
+        printf("\n------------------------------------------");
+        printf("\nFrame Number : %d",i+1);
+        printf("\nBinary Frame : %s",binaryFrames[i]);
+        printf("\nOdd Parity Bit : %c",parity);
+    }
+
+    printf("\n==========================================");
+
+    /*--------------- Receiver Side ----------------*/
+
+    printf("\n\nReceiver Side Verification");
+
+    for(i=0;i<totalFrames;i++)
+    {
+        ones=0;
+
+        for(j=0;binaryFrames[i][j]!='\0';j++)
+        {
+            if(binaryFrames[i][j]=='1')
+                ones++;
+        }
+
+        if(ones%2==0)
+            parity='1';
+        else
+            parity='0';
+
+        printf("\n------------------------------------------");
+        printf("\nFrame Number : %d",i+1);
+
+        printf("\nStored Parity     : %c",frameOddParity[i]);
+        printf("\nCalculated Parity : %c",parity);
+
+        if(parity==frameOddParity[i])
+            printf("\nStatus : No Error Detected");
+        else
+            printf("\nStatus : Error Detected");
+    }
+
+    printf("\n==========================================\n");
+}
+/*=========================================
+                CRC
+=========================================*/
+
+void crc()
+{
+    char divisor[] = "1001";
+
+    char temp[200];
+
+    char data[200];
+
+    int i,j,k;
+
+    int dataLength;
+
+    int divisorLength;
+
+    printf("\n==========================================");
+    printf("\n         CYCLIC REDUNDANCY CHECK");
+    printf("\n==========================================");
+
+    divisorLength = strlen(divisor);
+
+    /*------------- Sender Side -------------*/
+
+    for(i=0;i<totalFrames;i++)
+    {
+        strcpy(data,binaryFrames[i]);
+
+        dataLength = strlen(data);
+
+        for(j=0;j<divisorLength-1;j++)
+            data[dataLength+j]='0';
+
+        data[dataLength+divisorLength-1]='\0';
+
+        strcpy(temp,data);
+
+        for(j=0;j<dataLength;j++)
+        {
+            if(temp[j]=='1')
+            {
+                for(k=0;k<divisorLength;k++)
+                {
+                    if(temp[j+k]==divisor[k])
+                        temp[j+k]='0';
+                    else
+                        temp[j+k]='1';
+                }
+            }
+        }
+
+        strcpy(frameCRC[i],&temp[dataLength]);
+
+        printf("\n------------------------------------------");
+        printf("\nFrame Number : %d",i+1);
+
+        printf("\nBinary Frame : %s",binaryFrames[i]);
+
+        printf("\nCRC Remainder : %s",frameCRC[i]);
+    }
+
+    printf("\n==========================================");
+
+    /*------------- Receiver Side -------------*/
+
+    printf("\n\nReceiver Side Verification");
+
+    for(i=0;i<totalFrames;i++)
+    {
+        strcpy(data,binaryFrames[i]);
+
+        strcat(data,frameCRC[i]);
+
+        dataLength = strlen(binaryFrames[i]);
+
+        strcpy(temp,data);
+
+        for(j=0;j<dataLength;j++)
+        {
+            if(temp[j]=='1')
+            {
+                for(k=0;k<divisorLength;k++)
+                {
+                    if(temp[j+k]==divisor[k])
+                        temp[j+k]='0';
+                    else
+                        temp[j+k]='1';
+                }
+            }
+        }
+
+        printf("\n------------------------------------------");
+        printf("\nFrame Number : %d",i+1);
+
+        printf("\nReceived CRC : %s",frameCRC[i]);
+
+        if(strcmp(&temp[dataLength],"000")==0)
+            printf("\nStatus : No Error Detected");
+        else
+            printf("\nStatus : Error Detected");
+    }
+
+    printf("\n==========================================\n");
+}
+/*=========================================
+          INTERNET CHECKSUM
+=========================================*/
+
+void checksum()
+{
+    int i,j;
+    unsigned int sum;
+    unsigned short check;
+    unsigned short word;
+
+    char data[200];
+
+    printf("\n==========================================");
+    printf("\n        INTERNET CHECKSUM");
+    printf("\n==========================================");
+
+    /*------------ Sender Side ------------*/
+
+    for(i=0;i<totalFrames;i++)
+    {
+        strcpy(data,binaryFrames[i]);
+
+        sum = 0;
+
+        for(j=0; data[j]!='\0'; j+=16)
+        {
+            word = 0;
+
+            int k;
+
+            for(k=0;k<16;k++)
+            {
+                word <<= 1;
+
+                if(data[j+k]=='1')
+                    word |= 1;
+
+                if(data[j+k]=='\0')
+                    break;
+            }
+
+            sum += word;
+
+            while(sum>>16)
+            {
+                sum = (sum & 0xFFFF) + (sum>>16);
+            }
+        }
+
+        check = ~sum;
+
+        frameChecksum[i] = check;
+
+        printf("\n------------------------------------------");
+        printf("\nFrame Number : %d",i+1);
+
+        printf("\nBinary Frame : %s",binaryFrames[i]);
+
+        printf("\nChecksum     : %u",frameChecksum[i]);
+    }
+
+    printf("\n==========================================");
+
+    /*------------ Receiver Side ------------*/
+
+    printf("\n\nReceiver Side Verification");
+
+    for(i=0;i<totalFrames;i++)
+    {
+        strcpy(data,binaryFrames[i]);
+
+        sum = 0;
+
+        for(j=0; data[j]!='\0'; j+=16)
+        {
+            word = 0;
+
+            int k;
+
+            for(k=0;k<16;k++)
+            {
+                word <<= 1;
+
+                if(data[j+k]=='1')
+                    word |= 1;
+
+                if(data[j+k]=='\0')
+                    break;
+            }
+
+            sum += word;
+
+            while(sum>>16)
+            {
+                sum = (sum & 0xFFFF) + (sum>>16);
+            }
+        }
+
+        sum += frameChecksum[i];
+
+        while(sum>>16)
+        {
+            sum = (sum & 0xFFFF) + (sum>>16);
+        }
+
+        printf("\n------------------------------------------");
+        printf("\nFrame Number : %d",i+1);
+
+        printf("\nReceived Checksum : %u",frameChecksum[i]);
+
+        if((unsigned short)sum == 0xFFFF)
+            printf("\nStatus : No Error Detected");
+        else
+            printf("\nStatus : Error Detected");
+    }
+
+    printf("\n==========================================\n");
+}
+/*=========================================
+            RECEIVER SIDE
+=========================================*/
+
+void receiverSide()
+{
+    FILE *fp;
+    int i;
+
+    receivedMessage[0] = '\0';
+
+    printf("\n==========================================");
+    printf("\n          RECEIVER SIDE");
+    printf("\n==========================================");
+
+    printf("\nReceiving Frames...\n");
+
+    /*---------------- PHYSICAL LAYER ----------------*/
+
+    printf("\n==========================================");
+    printf("\nPHYSICAL LAYER");
+    printf("\n==========================================");
+
+    for(i=0;i<totalFrames;i++)
+    {
+        printf("\nFrame %d Received Successfully.",
+               frames[i].frameNumber);
+    }
+
+    /*---------------- DATA LINK LAYER ----------------*/
+
+    printf("\n\n==========================================");
+    printf("\nDATA LINK LAYER");
+    printf("\n==========================================");
+
+    for(i=0;i<totalFrames;i++)
+    {
+        printf("\n------------------------------------------");
+
+        printf("\nFrame Number      : %d",
+               frames[i].frameNumber);
+
+        printf("\nPacket Number     : %d",
+               frames[i].packetNumber);
+
+        printf("\nSource MAC        : %s",
+               frames[i].datalink.sourceMAC);
+
+        printf("\nDestination MAC   : %s",
+               frames[i].datalink.destinationMAC);
+
+        printf("\nFrame Data        : %s",
+               frames[i].data);
+    }
+
+    /*---------------- NETWORK LAYER ----------------*/
+
+    printf("\n\n==========================================");
+    printf("\nNETWORK LAYER");
+    printf("\n==========================================");
+
+    for(i=0;i<totalPackets;i++)
+    {
+        printf("\n------------------------------------------");
+
+        printf("\nPacket Number     : %d",
+               packets[i].packetNumber);
+
+        printf("\nSource IP         : %s",
+               packets[i].network.sourceIP);
+
+        printf("\nDestination IP    : %s",
+               packets[i].network.destinationIP);
+    }
+
+    /*---------------- TRANSPORT LAYER ----------------*/
+
+    printf("\n\n==========================================");
+    printf("\nTRANSPORT LAYER");
+    printf("\n==========================================");
+
+    printf("\nSource Port      : %d",sourcePort);
+    printf("\nDestination Port : %d",destinationPort);
+
+    /*---------------- APPLICATION LAYER ----------------*/
+
+    printf("\n\n==========================================");
+    printf("\nAPPLICATION LAYER");
+    printf("\n==========================================");
+
+    for(i=0;i<totalFrames;i++)
+    {
+        strcat(receivedMessage,frames[i].data);
+    }
+
+    printf("\nReceived Message :\n\n");
+
+    printf("%s\n",receivedMessage);
+
+    printf("\nMessage Size : %d Bytes",
+           (int)strlen(receivedMessage));
+
+    /*---------------- SAVE OUTPUT ----------------*/
+
+    fp = fopen("output.txt","w");
+
+    if(fp==NULL)
+    {
+        printf("\nCannot Create output.txt");
+        return;
+    }
+
+    fprintf(fp,"=========== RECEIVER OUTPUT ===========\n\n");
+
+    fprintf(fp,"Source IP : %s\n",sourceIP);
+    fprintf(fp,"Destination IP : %s\n",destinationIP);
+
+    fprintf(fp,"Source MAC : %s\n",sourceMAC);
+    fprintf(fp,"Destination MAC : %s\n",destinationMAC);
+
+    fprintf(fp,"Source Port : %d\n",sourcePort);
+    fprintf(fp,"Destination Port : %d\n\n",destinationPort);
+
+    fprintf(fp,"Total Packets : %d\n",totalPackets);
+    fprintf(fp,"Total Frames  : %d\n\n",totalFrames);
+
+    fprintf(fp,"Received Message :\n\n");
+
+    fprintf(fp,"%s\n",receivedMessage);
+
+    fclose(fp);
+
+    printf("\n------------------------------------------");
+    printf("\nReceiver Output Saved Successfully.");
+    printf("\nFile Name : output.txt");
+
+    printf("\n==========================================\n");
+}
+
+/*=========================================
+        TRANSMISSION SUMMARY
+=========================================*/
+
+void transmissionSummary()
+{
+    int i;
+
+    printf("\n\n");
+    printf("=============================================================\n");
+    printf("               COMPLETE TRANSMISSION SUMMARY\n");
+    printf("=============================================================\n");
+
+    printf("\nSender Information");
+    printf("\n-------------------------------------------------------------");
+
+    printf("\nSource URL            : %s",senderURL);
+    printf("\nDestination URL       : %s",receiverURL);
+
+    printf("\nSource IP             : %s",sourceIP);
+    printf("\nDestination IP        : %s",destinationIP);
+
+    printf("\nSource MAC            : %s",sourceMAC);
+    printf("\nDestination MAC       : %s",destinationMAC);
+
+    printf("\nSource Port           : %d",sourcePort);
+    printf("\nDestination Port      : %d",destinationPort);
+
+    printf("\n\nMessage Information");
+    printf("\n-------------------------------------------------------------");
+
+    printf("\nOriginal Message");
+
+    printf("\n%s",message);
+
+    printf("\n\nTotal Message Size");
+
+    printf("\nCharacters : %d",(int)strlen(message));
+
+    printf("\nBytes      : %d",(int)strlen(message));
+
+    printf("\nBits       : %d",(int)strlen(message)*8);
+
+    printf("\n\nPacket Information");
+    printf("\n-------------------------------------------------------------");
+
+    printf("\nTotal Packets : %d",totalPackets);
+
+    for(i=0;i<totalPackets;i++)
+    {
+        printf("\nPacket %d : %s",
+                packets[i].packetNumber,
+                packets[i].data);
+    }
+
+    printf("\n\nFrame Information");
+    printf("\n-------------------------------------------------------------");
+
+    printf("\nTotal Frames : %d",totalFrames);
+
+    for(i=0;i<totalFrames;i++)
+    {
+        printf("\nFrame %d (Packet %d) : %s",
+                frames[i].frameNumber,
+                frames[i].packetNumber,
+                frames[i].data);
+    }
+
+    printf("\n\nError Detection");
+    printf("\n-------------------------------------------------------------");
+
+    printf("\nEven Parity : Completed");
+    printf("\nOdd Parity  : Completed");
+    printf("\nCRC         : Completed");
+    printf("\nChecksum    : Completed");
+
+    if(errorFlag==0)
+    {
+        printf("\n\nTransmission Status : SUCCESS");
+        printf("\nReceiver received the message correctly.");
+    }
+    else
+    {
+        printf("\n\nTransmission Status : FAILED");
+        printf("\nError detected during transmission.");
+    }
+
+    printf("\n\nReceiver Message");
+    printf("\n-------------------------------------------------------------");
+
+    printf("\n%s",receivedMessage);
+
+    printf("\n\nOutput File : output.txt");
+
+    printf("\n=============================================================\n");
+}
+/*=========================================
+                MAIN FUNCTION
+=========================================*/
+
+int main()
+{
+    int found;
+    int choice;
+
+    srand(time(NULL));
+
+    printf("\n=================================================");
+    printf("\n       COMPUTER NETWORK SIMULATOR");
+    printf("\n=================================================\n");
+
+    /* Initialize Hash Table */
+    initializeHashTable();
+
+    /* Search URL */
+    found = searchRecord();
+
+    if(found == 0)
+    {
+        printf("\nProgram Terminated...\n");
+        return 0;
+    }
+
+    /* Read Message */
+    readMessageFromFile();
+
+    /* Application Layer */
+    printf("\n\nAPPLICATION LAYER COMPLETED.");
+
+    /* Binary Conversion */
+    messageToBinary();
+
+    /* Transport Layer */
+    transportLayer();
+
+    /* Network Layer */
+    networkLayer();
+
+    /* Convert IP into Binary */
+    ipToBinary();
+
+    /* Data Link Layer */
+    dataLinkLayer();
+
+    /* Convert MAC into Binary */
+    macToBinary();
+
+    /* Packet Creation */
+    createPackets();
+
+    /* Frame Creation */
+    createFrames();
+
+    /* Populate the binary frames array */
+    convertFramesToBinary();
+
+    printf("\n=========================================");
+    printf("\nTransmission Mode");
+    printf("\n=========================================");
+
+    printf("\n1. Normal Transmission");
+    printf("\n2. Error Simulation");
+
+    printf("\n\nEnter Choice : ");
+    scanf("%d",&choice);
+
+    if(choice==2)
+    {
+        simulateError();
+    }
+    else
+    {
+        printf("\nNormal Transmission Selected.");
+    }
+
+    /* Error Detection */
+
+    evenParity();
+
+    oddParity();
+
+    crc();
+
+    checksum();
+
+    /* Receiver Side */
+
+    receiverSide();
+
+    /* Summary */
+
+    transmissionSummary();
+
+    printf("\n=========================================");
+    printf("\nProgram Executed Successfully.");
+    printf("\n=========================================\n");
+
+    return 0;
+}
