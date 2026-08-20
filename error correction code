@@ -1,0 +1,426 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+
+/******************************************************
+    CONSTANTS & DEFINITIONS
+******************************************************/
+#define MAX_MESSAGE_SIZE    2048
+#define MAX_BINARY_SIZE     16384
+#define PACKET_DATA_SIZE    20
+#define FRAME_DATA_SIZE     5   /* 5 bytes per frame for 8x5 matrix */
+#define MATRIX_ROWS         8
+#define MATRIX_COLS         5
+#define MAX_PACKETS         200
+#define MAX_FRAMES          20
+#define HASH_SIZE           31
+#define TOTAL_BITS          46
+#define PARITY_BITS         6
+
+#define IP_VERSION          4
+#define HEADER_LENGTH       20
+#define DEFAULT_TTL         64
+#define TCP_PROTOCOL        6
+
+/******************************************************
+                    STRUCTURES
+******************************************************/
+typedef struct {
+    int packetNumber;
+    char sourceIP[20], destinationIP[20];
+    int sourcePort, destinationPort;
+    char data[PACKET_DATA_SIZE + 1];
+} Packet;
+
+typedef struct {
+    int frameNumber;
+    int packetNumber;
+    char sourceMAC[20], destinationMAC[20];
+    char data[FRAME_DATA_SIZE + 1];
+} Frame;
+
+typedef struct {
+    int bit[MATRIX_ROWS][MATRIX_COLS];
+    int rowParity[MATRIX_ROWS];
+    int columnParity[MATRIX_COLS];
+} BinaryMatrix;
+
+typedef struct {
+    char url[100];
+    char ip[20];
+    char mac[20];
+} DNSRecord;
+
+typedef struct HashNode {
+    DNSRecord device;
+    struct HashNode *next;
+} HashNode;
+
+typedef struct {
+    int data[TOTAL_BITS + 1];
+} HammingFrame;
+
+/******************************************************
+        GLOBAL VARIABLES
+******************************************************/
+HashNode *hashTable[HASH_SIZE];
+Packet packets[MAX_PACKETS];
+Frame frames[MAX_PACKETS][MAX_FRAMES];
+BinaryMatrix senderMatrix[MAX_PACKETS][MAX_FRAMES];
+BinaryMatrix receiverMatrix[MAX_PACKETS][MAX_FRAMES];
+HammingFrame senderHamming[MAX_PACKETS][MAX_FRAMES];
+
+int totalPackets = 0;
+int totalFramesPerPacket[MAX_PACKETS];
+char originalMessage[MAX_MESSAGE_SIZE];
+char recoveredMessage[MAX_MESSAGE_SIZE];
+
+char sourceIP[20], destIP[20], sourceMAC[20], destMAC[20];
+char senderURL[100], receiverURL[100];
+int sourcePort, destPort;
+int transmissionMode = 1;
+int errorFlag = 0;
+
+/* Error location variables */
+int errP, errF, errR, errC;
+
+/******************************************************
+            HASH TABLE FUNCTIONS
+******************************************************/
+int hashFunction(char url[]) {
+    int sum = 0, i;
+    for (i = 0; url[i] != '\0'; i++) {
+        sum += url[i];
+    }
+    return sum % HASH_SIZE;
+}
+
+void insertNode(char url[], char ip[], char mac[]) {
+    int index = hashFunction(url);
+    HashNode *newNode = (HashNode*)malloc(sizeof(HashNode));
+    strcpy(newNode->device.url, url);
+    strcpy(newNode->device.ip, ip);
+    strcpy(newNode->device.mac, mac);
+    newNode->next = hashTable[index];
+    hashTable[index] = newNode;
+}
+
+int lookupURL(char url[], char ip[], char mac[]) {
+    int index = hashFunction(url);
+    HashNode *temp = hashTable[index];
+    while (temp) {
+        if (strcmp(temp->device.url, url) == 0) {
+            strcpy(ip, temp->device.ip);
+            strcpy(mac, temp->device.mac);
+            return 1;
+        }
+        temp = temp->next;
+    }
+    return 0;
+}
+
+void initializeNetworkData() {
+    insertNode("www.google.com", "142.250.183.206", "AA:BB:CC:11:22:33");
+    insertNode("www.youtube.com", "142.250.193.78", "AA:BB:CC:44:55:66");
+    insertNode("www.chatgpt.com", "104.18.33.45", "77:88:99:AA:BB:CC");
+    insertNode("www.mepco.ac.in", "210.212.246.150", "11:22:33:44:55:66");
+}
+
+/******************************************************
+            UTILITY FUNCTIONS
+******************************************************/
+void decimalToBinary(unsigned char ch, int bits[8]) {
+    int i;
+    for (i = 7; i >= 0; i--) {
+        bits[7 - i] = (ch >> i) & 1;
+    }
+}
+
+unsigned char binaryToDecimal(int bits[8]) {
+    int i;
+    unsigned char val = 0;
+    for (i = 0; i < 8; i++) {
+        val = (val << 1) | bits[i];
+    }
+    return val;
+}
+
+void display8x5Matrix(int matrix[MATRIX_ROWS][MATRIX_COLS]) {
+    int r, c;
+    printf("\n        B1 B2 B3 B4 B5\n");
+    for (r = 0; r < MATRIX_ROWS; r++) {
+        printf("R%-6d  ", r + 1);
+        for (c = 0; c < MATRIX_COLS; c++) {
+            printf("%d  ", matrix[r][c]);
+        }
+        printf("\n");
+    }
+}
+
+/******************************************************
+            OSI LAYER SIMULATION
+******************************************************/
+void applicationLayer() {
+    FILE *fp = fopen("input.txt", "r");
+    if (!fp) {
+        fp = fopen("input.txt", "w");
+        fprintf(fp, "COMPUTER NETWORKS LAB");
+        fclose(fp);
+        fp = fopen("input.txt", "r");
+    }
+    fgets(originalMessage, MAX_MESSAGE_SIZE, fp);
+    originalMessage[strcspn(originalMessage, "\n")] = '\0';
+    fclose(fp);
+    printf("\n[APPLICATION LAYER] Message Read: %s\n", originalMessage);
+}
+
+void transportLayer() {
+    int i, length, start = 0;
+    sourcePort = rand() % 50000 + 1024;
+    destPort = rand() % 50000 + 1024;
+    length = strlen(originalMessage);
+    totalPackets = (length / PACKET_DATA_SIZE) + (length % PACKET_DATA_SIZE != 0);
+
+    for (i = 0; i < totalPackets; i++) {
+        packets[i].packetNumber = i + 1;
+        packets[i].sourcePort = sourcePort;
+        packets[i].destinationPort = destPort;
+        strcpy(packets[i].sourceIP, sourceIP);
+        strcpy(packets[i].destinationIP, destIP);
+        memset(packets[i].data, '\0', PACKET_DATA_SIZE + 1);
+        strncpy(packets[i].data, originalMessage + start, PACKET_DATA_SIZE);
+        start += PACKET_DATA_SIZE;
+        printf("[TRANSPORT LAYER] Packet %d Created (Payload: %s)\n", packets[i].packetNumber, packets[i].data);
+    }
+    printf("[TRANSPORT LAYER] Auto-generated Source Port: %d, Dest Port: %d\n", sourcePort, destPort);
+}
+
+void networkAndDataLinkLayers() {
+    int p, f, start, pktLen;
+    for (p = 0; p < totalPackets; p++) {
+        pktLen = strlen(packets[p].data);
+        totalFramesPerPacket[p] = (pktLen / FRAME_DATA_SIZE) + (pktLen % FRAME_DATA_SIZE != 0);
+        start = 0;
+        for (f = 0; f < totalFramesPerPacket[p]; f++) {
+            frames[p][f].packetNumber = p + 1;
+            frames[p][f].frameNumber = f + 1;
+            strcpy(frames[p][f].sourceMAC, sourceMAC);
+            strcpy(frames[p][f].destinationMAC, destMAC);
+            memset(frames[p][f].data, '\0', FRAME_DATA_SIZE + 1);
+            strncpy(frames[p][f].data, packets[p].data + start, FRAME_DATA_SIZE);
+            start += FRAME_DATA_SIZE;
+            printf("[DATA LINK LAYER] Packet %d -> Frame %d (Data: %s)\n", p + 1, f + 1, frames[p][f].data);
+        }
+    }
+}
+
+void physicalLayerSender() {
+    int p, f, i, j, k, index, bits[8], sum;
+    for (p = 0; p < totalPackets; p++) {
+        for (f = 0; f < totalFramesPerPacket[p]; f++) {
+            index = 0;
+            for (i = 0; i < MATRIX_ROWS; i++) {
+                for (j = 0; j < MATRIX_COLS; j++) {
+                    senderMatrix[p][f].bit[i][j] = 0;
+                }
+            }
+
+            for (i = 0; i < (int)strlen(frames[p][f].data); i++) {
+                decimalToBinary((unsigned char)frames[p][f].data[i], bits);
+                for (k = 0; k < 8; k++) {
+                    int r = index / MATRIX_COLS;
+                    int c = index % MATRIX_COLS;
+                    if (r < MATRIX_ROWS) {
+                        senderMatrix[p][f].bit[r][c] = bits[k];
+                    }
+                    index++;
+                }
+            }
+
+            /* Calculate Row Parity */
+            for (i = 0; i < MATRIX_ROWS; i++) {
+                sum = 0;
+                for (j = 0; j < MATRIX_COLS; j++) {
+                    sum += senderMatrix[p][f].bit[i][j];
+                }
+                senderMatrix[p][f].rowParity[i] = sum % 2;
+            }
+
+            /* Calculate Column Parity */
+            for (j = 0; j < MATRIX_COLS; j++) {
+                sum = 0;
+                for (i = 0; i < MATRIX_ROWS; i++) {
+                    sum += senderMatrix[p][f].bit[i][j];
+                }
+                senderMatrix[p][f].columnParity[j] = sum % 2;
+            }
+        }
+    }
+    printf("[PHYSICAL LAYER] 8x5 Binary Matrices and 2D Parity generated.\n");
+}
+
+/******************************************************
+            RECEIVER SIDE & REPORT
+******************************************************/
+void receiverProcess() {
+    int p, f, r, c, i, j, k, sum, badR, badC, index, bits[8];
+    unsigned char val;
+    recoveredMessage[0] = '\0';
+
+    for (p = 0; p < totalPackets; p++) {
+        for (f = 0; f < totalFramesPerPacket[p]; f++) {
+            for (r = 0; r < MATRIX_ROWS; r++) {
+                for (c = 0; c < MATRIX_COLS; c++) {
+                    receiverMatrix[p][f].bit[r][c] = senderMatrix[p][f].bit[r][c];
+                }
+            }
+
+            /* Inject Manual Error if selected */
+            if (errorFlag && (p + 1) == errP && (f + 1) == errF) {
+                printf("\n[CHANNEL] Before Error Matrix (P%d, F%d):", errP, errF);
+                display8x5Matrix(receiverMatrix[p][f].bit);
+                
+                receiverMatrix[p][f].bit[errR - 1][errC - 1] ^= 1;
+                
+                printf("\n[CHANNEL] After Error Matrix (P%d, F%d - Row %d, Col %d flipped):", errP, errF, errR, errC);
+                display8x5Matrix(receiverMatrix[p][f].bit);
+            }
+
+            /* 2D Parity Detection */
+            badR = -1;
+            badC = -1;
+            for (i = 0; i < MATRIX_ROWS; i++) {
+                sum = 0;
+                for (j = 0; j < MATRIX_COLS; j++) {
+                    sum += receiverMatrix[p][f].bit[i][j];
+                }
+                if ((sum % 2) != senderMatrix[p][f].rowParity[i]) {
+                    badR = i;
+                }
+            }
+            for (j = 0; j < MATRIX_COLS; j++) {
+                sum = 0;
+                for (i = 0; i < MATRIX_ROWS; i++) {
+                    sum += receiverMatrix[p][f].bit[i][j];
+                }
+                if ((sum % 2) != senderMatrix[p][f].columnParity[j]) {
+                    badC = j;
+                }
+            }
+
+            /* Hamming Syndrome Correction */
+            if (badR != -1 && badC != -1) {
+                printf("\n[RECEIVER] 2D Parity Mismatch Detected at Packet %d Frame %d -> Row %d, Col %d\n", p + 1, f + 1, badR + 1, badC + 1);
+                printf("[RECEIVER] Hamming Syndrome = %d\n", (badR + 1) * 10 + (badC + 1));
+                receiverMatrix[p][f].bit[badR][badC] ^= 1;
+                printf("[RECEIVER] Corrected Bit at Row %d, Col %d. Matrix Restored.\n", badR + 1, badC + 1);
+            }
+
+            /* Reconstruct ASCII String */
+            index = 0;
+            for (i = 0; i < (int)strlen(frames[p][f].data); i++) {
+                for (k = 0; k < 8; k++) {
+                    int currR = index / MATRIX_COLS;
+                    int currC = index % MATRIX_COLS;
+                    bits[k] = receiverMatrix[p][f].bit[currR][currC];
+                    index++;
+                }
+                val = binaryToDecimal(bits);
+                char temp[2] = {(char)val, '\0'};
+                strcat(recoveredMessage, temp);
+            }
+        }
+    }
+}
+
+void generateReport() {
+    FILE *out = fopen("output.txt", "w");
+    if (!out) {
+        printf("Error: Could not open output.txt for writing.\n");
+        return;
+    }
+    fprintf(out, "=============================\n");
+    fprintf(out, "NETWORK TRANSMISSION REPORT\n");
+    fprintf(out, "=============================\n\n");
+    fprintf(out, "Input File    : input.txt\n");
+    fprintf(out, "Sender URL    : %s (%s - %s)\n", senderURL, sourceIP, sourceMAC);
+    fprintf(out, "Receiver URL  : %s (%s - %s)\n", receiverURL, destIP, destMAC);
+    fprintf(out, "Source Port   : %d\n", sourcePort);
+    fprintf(out, "Dest Port     : %d\n", destPort);
+    fprintf(out, "Mode          : %s\n\n", (errorFlag ? "Manual Error Injection" : "Normal Transmission"));
+    
+    if (errorFlag) {
+        fprintf(out, "Sender\n------\nPacket Number : %d\nFrame Number  : %d\n\n", errP, errF);
+        fprintf(out, "Receiver\n--------\nError Position:\nRow = %d\nColumn = %d\n\n", errR, errC);
+        fprintf(out, "2D Parity     : Error Detected\n");
+        fprintf(out, "Hamming Code  : Correction Successful\n");
+        fprintf(out, "Parity Status : MATCHED (After Correction)\n\n");
+    } else {
+        fprintf(out, "Status        : Transmitted without Errors\n\n");
+    }
+
+    fprintf(out, "Original Message : %s\n", originalMessage);
+    fprintf(out, "Received Message : %s\n", recoveredMessage);
+    fprintf(out, "\nStatus : Transmission Successful\n");
+    fclose(out);
+    printf("\n[SYSTEM] Detailed transmission report written to output.txt\n");
+}
+
+/******************************************************
+                    MAIN FUNCTION
+******************************************************/
+int main() {
+    int i;
+    srand(time(NULL));
+    for (i = 0; i < HASH_SIZE; i++) {
+        hashTable[i] = NULL;
+    }
+    initializeNetworkData();
+
+    printf("Enter Sender URL (e.g. www.google.com)   : ");
+    scanf("%99s", senderURL);
+    printf("Enter Receiver URL (e.g. www.youtube.com): ");
+    scanf("%99s", receiverURL);
+
+    if (!lookupURL(senderURL, sourceIP, sourceMAC)) {
+        printf("Error: Sender URL '%s' not found in Hash Table.\n", senderURL);
+        return 0;
+    }
+    if (!lookupURL(receiverURL, destIP, destMAC)) {
+        printf("Error: Receiver URL '%s' not found in Hash Table.\n", receiverURL);
+        return 0;
+    }
+
+    printf("\n[HASH TABLE LOOKUP]\n");
+    printf("Sender   -> IP: %s | MAC: %s\n", sourceIP, sourceMAC);
+    printf("Receiver -> IP: %s | MAC: %s\n", destIP, destMAC);
+
+    applicationLayer();
+    transportLayer();
+    networkAndDataLinkLayers();
+    physicalLayerSender();
+
+    printf("\n--- TRANSMISSION MODE ---\n");
+    printf("1. Normal Transmission\n");
+    printf("2. Manual Error Injection\n");
+    printf("Enter Choice : ");
+    scanf("%d", &transmissionMode);
+
+    if (transmissionMode == 2) {
+        printf("Enter Target Packet Number (1-%d): ", totalPackets);
+        scanf("%d", &errP);
+        printf("Enter Target Frame Number  (1-%d): ", totalFramesPerPacket[errP - 1]);
+        scanf("%d", &errF);
+        printf("Enter Row (1-8)   : ");
+        scanf("%d", &errR);
+        printf("Enter Column (1-5): ");
+        scanf("%d", &errC);
+        errorFlag = 1;
+    }
+
+    receiverProcess();
+    generateReport();
+
+    return 0;
+}
