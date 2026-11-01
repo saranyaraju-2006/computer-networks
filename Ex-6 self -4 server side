@@ -1,0 +1,94 @@
+//Server (q4_server.c)
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+#include <time.h>
+
+#define PORT 8083
+
+struct Student {
+    char reg_no[20];
+    char name[50];
+    char dept[20];
+    int semester;
+    float marks;
+    char grade;
+    float cgpa;
+};
+
+void log_txn(const char *action) {
+    FILE *log = fopen("db_transactions.log", "a");
+    if (log) {
+        time_t now = time(NULL);
+        char *t = ctime(&now); t[strlen(t)-1] = 0;
+        fprintf(log, "[%s] %s\n", t, action);
+        fclose(log);
+    }
+}
+
+int main() {
+    int server_fd, client_socket;
+    struct sockaddr_in address;
+    int addrlen = sizeof(address);
+    char buffer[2048] = {0};
+    
+    server_fd = socket(AF_INET, SOCK_STREAM, 0);
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = INADDR_ANY;
+    address.sin_port = htons(PORT);
+    
+    bind(server_fd, (struct sockaddr *)&address, sizeof(address));
+    listen(server_fd, 3);
+    printf("Student DB Server listening...\n");
+    
+    client_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen);
+    
+    while(1) {
+        memset(buffer, 0, sizeof(buffer));
+        if (read(client_socket, buffer, 2048) <= 0) break;
+        
+        int cmd = buffer[0] - '0';
+        char response[2048] = {0};
+        
+        if (cmd == 1) { // ADD
+            struct Student s;
+            // Parse CSV format sent by client
+            sscanf(buffer + 2, "%[^,],%[^,],%[^,],%d,%f,%c,%f", 
+                   s.reg_no, s.name, s.dept, &s.semester, &s.marks, &s.grade, &s.cgpa);
+            
+            FILE *fp = fopen("students.dat", "a");
+            if(fp) {
+                fprintf(fp, "%s,%s,%s,%d,%.2f,%c,%.2f\n", s.reg_no, s.name, s.dept, s.semester, s.marks, s.grade, s.cgpa);
+                fclose(fp);
+                strcpy(response, "Student Added Successfully.");
+                log_txn("Added new student record.");
+            } else {
+                strcpy(response, "ERROR: Could not open database.");
+                log_txn("Error opening database file.");
+            }
+        } else if (cmd == 2) { // DISPLAY ALL
+            FILE *fp = fopen("students.dat", "r");
+            if (fp) {
+                char line[256];
+                strcpy(response, "--- Student Records ---\n");
+                while(fgets(line, sizeof(line), fp)) {
+                    strcat(response, line);
+                }
+                fclose(fp);
+                log_txn("Retrieved all student records.");
+            } else {
+                strcpy(response, "No records found.");
+            }
+        } else {
+            strcpy(response, "Invalid Operation Code.");
+            log_txn("Invalid Operation Code received.");
+        }
+        send(client_socket, response, strlen(response), 0);
+    }
+    close(client_socket);
+    close(server_fd);
+    return 0;
+}
