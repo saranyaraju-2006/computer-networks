@@ -1,0 +1,43 @@
+Client (hotel_client.c)
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+
+#define PORT 9002
+
+int main() {
+    int sock = socket(AF_INET, SOCK_STREAM, 0);
+    struct sockaddr_in serv_addr = { .sin_family = AF_INET, .sin_port = htons(PORT) };
+    inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr);
+
+    if (connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
+        printf("Connection failed.\n");
+        return -1;
+    }
+
+    char buffer[1024];
+    while (1) {
+        printf("\n1. View Available Rooms\n2. Book Room\n3. Cancel Room\n4. Exit\nChoice: ");
+        int choice, room = 0;
+        scanf("%d", &choice);
+
+        if (choice == 4) break;
+        if (choice == 2 || choice == 3) {
+            printf("Enter Room Number (101 - 105): ");
+            scanf("%d", &room);
+        }
+
+        snprintf(buffer, sizeof(buffer), "%d %d", choice, room);
+        send(sock, buffer, strlen(buffer), 0);
+
+        memset(buffer, 0, sizeof(buffer));
+        read(sock, buffer, sizeof(buffer));
+        printf("\n%s", buffer);
+    }
+
+    close(sock);
+    return 0;
+}
