@@ -1,0 +1,655 @@
+1. Online Examination Management System (Concurrent Multithreaded)
+Server (exam_server.c)
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+#include <pthread.h>
+#include <time.h>
+
+#define PORT 9001
+
+pthread_mutex_t log_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+void log_action(const char *user, const char *action) {
+    pthread_mutex_lock(&log_mutex);
+    FILE *fp = fopen("exam_log.txt", "a");
+    if (fp) {
+        time_t now = time(NULL);
+        char *t = ctime(&now);
+        t[strlen(t) - 1] = '\0';
+        fprintf(fp, "[%s] User: %s | Action: %s\n", t, user, action);
+        fclose(fp);
+    }
+    pthread_mutex_unlock(&log_mutex);
+}
+
+void *client_handler(void *arg) {
+    int sock = *(int *)arg;
+    free(arg);
+    char buffer[1024];
+    char username[50] = {0};
+
+    // 1. Authentication
+    memset(buffer, 0, sizeof(buffer));
+    if (read(sock, buffer, sizeof(buffer)) <= 0) { close(sock); return NULL; }
+    
+    char password[50] = {0};
+    sscanf(buffer, "%s %s", username, password);
+
+    // Simple credential check
+    if (strcmp(password, "exam123") == 0) {
+        send(sock, "AUTH_OK", 7, 0);
+        log_action(username, "Login Successful");
+    } else {
+        send(sock, "AUTH_FAIL", 9, 0);
+        log_action(username, "Failed Login Attempt");
+        close(sock);
+        return NULL;
+    }
+
+    // 2. Send Examination Questions
+    const char *questions = 
+        "Q1: What is the default transport layer protocol for HTTP? (A) UDP (B) TCP (C) IP\n"
+        "Q2: What is the size of an IPv4 address? (A) 32-bit (B) 64-bit (C) 128-bit\n"
+        "Q3: Which layer handles routing? (A) Physical (B) Network (C) Data Link\n"
+        "Enter answers as single string (e.g. B A B): ";
+    send(sock, questions, strlen(questions), 0);
+    log_action(username, "Retrieved Examination Questions");
+
+    // 3. Receive Answers & Evaluate
+    memset(buffer, 0, sizeof(buffer));
+    if (read(sock, buffer, sizeof(buffer)) > 0) {
+        char a1, a2, a3;
+        sscanf(buffer, " %c %c %c", &a1, &a2, &a3);
+
+        int score = 0;
+        if (a1 == 'B' || a1 == 'b') score++;
+        if (a2 == 'A' || a2 == 'a') score++;
+        if (a3 == 'B' || a3 == 'b') score++;
+
+        char result[128];
+        snprintf(result, sizeof(result), "Evaluation Complete! Your Score: %d / 3\n", score);
+        send(sock, result, strlen(result), 0);
+
+        char log_res[64];
+        snprintf(log_res, sizeof(log_res), "Submitted exam. Score: %d/3", score);
+        log_action(username, log_res);
+    }
+
+    log_action(username, "Disconnected gracefully");
+    close(sock);
+    return NULL;
+}
+
+int main() {
+    int server_fd = socket(AF_INET, SOCK_STREAM, 0);
+    int opt = 1;
+    setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+
+    struct sockaddr_in addr = { .sin_family = AF_INET, .sin_port = htons(PORT), .sin_addr.s_addr = INADDR_ANY };
+    bind(server_fd, (struct sockaddr *)&addr, sizeof(addr));
+    listen(server_fd, 10);
+    printf("Exam Server running on port %d...\n", PORT);
+
+    while (1) {
+        int *client_sock = malloc(sizeof(int));
+        *client_sock = accept(server_fd, NULL, NULL);
+        pthread_t tid;
+        pthread_create(&tid, NULL, client_handler, client_sock);
+        pthread_detach(tid);
+    }
+    close(server_fd);
+    return 0;
+}
+
+
+
+******************************
+
+Client (exam_client.c)
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+
+#define PORT 9001
+
+int main() {
+    int sock = socket(AF_INET, SOCK_STREAM, 0);
+    struct sockaddr_in serv_addr = { .sin_family = AF_INET, .sin_port = htons(PORT) };
+    inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr);
+
+    if (connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
+        printf("Connection failed.\n");
+        return -1;
+    }
+
+    char username[50], password[50], buffer[2048];
+    printf("Username: "); scanf("%s", username);
+    printf("Password (default: exam123): "); scanf("%s", password);
+
+    snprintf(buffer, sizeof(buffer), "%s %s", username, password);
+    send(sock, buffer, strlen(buffer), 0);
+
+    memset(buffer, 0, sizeof(buffer));
+    read(sock, buffer, sizeof(buffer));
+    if (strcmp(buffer, "AUTH_OK") != 0) {
+        printf("Authentication failed!\n");
+        close(sock);
+        return 0;
+    }
+    printf("Authentication Successful!\n\n");
+
+    // Receive questions
+    memset(buffer, 0, sizeof(buffer));
+    read(sock, buffer, sizeof(buffer));
+    printf("%s", buffer);
+
+    // Send answers
+    char a1, a2, a3;
+    scanf(" %c %c %c", &a1, &a2, &a3);
+    snprintf(buffer, sizeof(buffer), "%c %c %c", a1, a2, a3);
+    send(sock, buffer, strlen(buffer), 0);
+
+    // Receive final score
+    memset(buffer, 0, sizeof(buffer));
+    read(sock, buffer, sizeof(buffer));
+    printf("\n%s", buffer);
+
+    close(sock);
+    return 0;
+}
+
+
+******************************
+
+2. Hotel Reservation System (Mutex Synchronized)
+Server (hotel_server.c)
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+#include <pthread.h>
+#include <time.h>
+
+#define PORT 9002
+#define TOTAL_ROOMS 5
+
+int rooms[TOTAL_ROOMS] = {0}; // 0 = Available, 1 = Booked
+pthread_mutex_t booking_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+void log_transaction(const char *action) {
+    FILE *fp = fopen("hotel_log.txt", "a");
+    if (fp) {
+        time_t now = time(NULL);
+        char *t = ctime(&now);
+        t[strlen(t) - 1] = '\0';
+        fprintf(fp, "[%s] %s\n", t, action);
+        fclose(fp);
+    }
+}
+
+void *client_handler(void *arg) {
+    int sock = *(int *)arg;
+    free(arg);
+    char buffer[256], response[1024];
+
+    while (1) {
+        memset(buffer, 0, sizeof(buffer));
+        if (read(sock, buffer, sizeof(buffer)) <= 0) break;
+
+        int cmd = 0, room_no = 0;
+        sscanf(buffer, "%d %d", &cmd, &room_no);
+        memset(response, 0, sizeof(response));
+
+        if (cmd == 1) { // View availability
+            pthread_mutex_lock(&booking_mutex);
+            strcpy(response, "Room Status:\n");
+            for (int i = 0; i < TOTAL_ROOMS; i++) {
+                char temp[32];
+                snprintf(temp, sizeof(temp), "Room %d: %s\n", 101 + i, rooms[i] ? "Booked" : "Available");
+                strcat(response, temp);
+            }
+            pthread_mutex_unlock(&booking_mutex);
+        } else if (cmd == 2) { // Book Room
+            int index = room_no - 101;
+            pthread_mutex_lock(&booking_mutex); // Lock prevents race condition
+            if (index >= 0 && index < TOTAL_ROOMS) {
+                if (rooms[index] == 0) {
+                    rooms[index] = 1;
+                    strcpy(response, "SUCCESS: Room booked successfully!\n");
+                    char log_msg[64];
+                    snprintf(log_msg, sizeof(log_msg), "Room %d booked.", room_no);
+                    log_transaction(log_msg);
+                } else {
+                    strcpy(response, "FAILED: Room is already booked!\n");
+                }
+            } else {
+                strcpy(response, "FAILED: Invalid Room Number.\n");
+            }
+            pthread_mutex_unlock(&booking_mutex);
+        } else if (cmd == 3) { // Cancel Room
+            int index = room_no - 101;
+            pthread_mutex_lock(&booking_mutex);
+            if (index >= 0 && index < TOTAL_ROOMS) {
+                if (rooms[index] == 1) {
+                    rooms[index] = 0;
+                    strcpy(response, "SUCCESS: Room booking cancelled.\n");
+                    char log_msg[64];
+                    snprintf(log_msg, sizeof(log_msg), "Room %d cancelled.", room_no);
+                    log_transaction(log_msg);
+                } else {
+                    strcpy(response, "FAILED: Room was not booked.\n");
+                }
+            } else {
+                strcpy(response, "FAILED: Invalid Room Number.\n");
+            }
+            pthread_mutex_unlock(&booking_mutex);
+        } else if (cmd == 4) {
+            break;
+        }
+        send(sock, response, strlen(response), 0);
+    }
+
+    close(sock);
+    return NULL;
+}
+
+int main() {
+    int server_fd = socket(AF_INET, SOCK_STREAM, 0);
+    int opt = 1;
+    setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+
+    struct sockaddr_in addr = { .sin_family = AF_INET, .sin_port = htons(PORT), .sin_addr.s_addr = INADDR_ANY };
+    bind(server_fd, (struct sockaddr *)&addr, sizeof(addr));
+    listen(server_fd, 10);
+    printf("Hotel Reservation Server listening on port %d...\n", PORT);
+
+    while (1) {
+        int *client_sock = malloc(sizeof(int));
+        *client_sock = accept(server_fd, NULL, NULL);
+        pthread_t tid;
+        pthread_create(&tid, NULL, client_handler, client_sock);
+        pthread_detach(tid);
+    }
+    close(server_fd);
+    return 0;
+}
+
+
+******************************
+
+Client (hotel_client.c)
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+
+#define PORT 9002
+
+int main() {
+    int sock = socket(AF_INET, SOCK_STREAM, 0);
+    struct sockaddr_in serv_addr = { .sin_family = AF_INET, .sin_port = htons(PORT) };
+    inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr);
+
+    if (connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
+        printf("Connection failed.\n");
+        return -1;
+    }
+
+    char buffer[1024];
+    while (1) {
+        printf("\n1. View Available Rooms\n2. Book Room\n3. Cancel Room\n4. Exit\nChoice: ");
+        int choice, room = 0;
+        scanf("%d", &choice);
+
+        if (choice == 4) break;
+        if (choice == 2 || choice == 3) {
+            printf("Enter Room Number (101 - 105): ");
+            scanf("%d", &room);
+        }
+
+        snprintf(buffer, sizeof(buffer), "%d %d", choice, room);
+        send(sock, buffer, strlen(buffer), 0);
+
+        memset(buffer, 0, sizeof(buffer));
+        read(sock, buffer, sizeof(buffer));
+        printf("\n%s", buffer);
+    }
+
+    close(sock);
+    return 0;
+}
+
+
+
+******************************
+
+3. Concurrent File Sharing Server
+Server (fileshare_server.c)
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+#include <pthread.h>
+#include <fcntl.h>
+
+#define PORT 9003
+#define BUFFER_SIZE 1024
+
+void *client_handler(void *arg) {
+    int sock = *(int *)arg;
+    free(arg);
+    char buffer[BUFFER_SIZE];
+
+    while (1) {
+        memset(buffer, 0, sizeof(buffer));
+        int bytes = read(sock, buffer, sizeof(buffer));
+        if (bytes <= 0) break;
+
+        buffer[strcspn(buffer, "\r\n")] = 0;
+
+        if (strcmp(buffer, "LIST") == 0) {
+            // Return catalog of available files
+            const char *file_list = "Available Files:\n- test1.txt\n- sample.pdf\n- notes.txt\n";
+            send(sock, file_list, strlen(file_list), 0);
+        } else if (strncmp(buffer, "GET ", 4) == 0) {
+            char *filename = buffer + 4;
+            FILE *fp = fopen(filename, "rb");
+
+            if (fp == NULL) {
+                char *err = "ERROR: File not found.\n";
+                send(sock, err, strlen(err), 0);
+            } else {
+                char ack[] = "START";
+                send(sock, ack, strlen(ack), 0);
+                usleep(50000); // Allow client to switch to receiving mode
+
+                int n;
+                char data[BUFFER_SIZE];
+                while ((n = fread(data, 1, sizeof(data), fp)) > 0) {
+                    send(sock, data, n, 0);
+                }
+                fclose(fp);
+                usleep(50000);
+                send(sock, "EOF_REACHED", 11, 0);
+            }
+        }
+    }
+
+    close(sock);
+    return NULL;
+}
+
+int main() {
+    int server_fd = socket(AF_INET, SOCK_STREAM, 0);
+    int opt = 1;
+    setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+
+    struct sockaddr_in addr = { .sin_family = AF_INET, .sin_port = htons(PORT), .sin_addr.s_addr = INADDR_ANY };
+    bind(server_fd, (struct sockaddr *)&addr, sizeof(addr));
+    listen(server_fd, 10);
+    printf("File Sharing Server running on port %d...\n", PORT);
+
+    while (1) {
+        int *client_sock = malloc(sizeof(int));
+        *client_sock = accept(server_fd, NULL, NULL);
+        pthread_t tid;
+        pthread_create(&tid, NULL, client_handler, client_sock);
+        pthread_detach(tid);
+    }
+    close(server_fd);
+    return 0;
+}
+
+
+
+******************************
+
+Client (fileshare_client.c)
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+
+#define PORT 9003
+#define BUFFER_SIZE 1024
+
+int main() {
+    int sock = socket(AF_INET, SOCK_STREAM, 0);
+    struct sockaddr_in serv_addr = { .sin_family = AF_INET, .sin_port = htons(PORT) };
+    inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr);
+
+    if (connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
+        printf("Connection failed.\n");
+        return -1;
+    }
+
+    char buffer[BUFFER_SIZE];
+    while (1) {
+        printf("\n1. List Files\n2. Download File\n3. Exit\nChoice: ");
+        int choice;
+        scanf("%d", &choice);
+
+        if (choice == 1) {
+            send(sock, "LIST", 4, 0);
+            memset(buffer, 0, sizeof(buffer));
+            read(sock, buffer, sizeof(buffer));
+            printf("\n%s\n", buffer);
+        } else if (choice == 2) {
+            char fname[100];
+            printf("Enter filename: ");
+            scanf("%s", fname);
+
+            snprintf(buffer, sizeof(buffer), "GET %s", fname);
+            send(sock, buffer, strlen(buffer), 0);
+
+            memset(buffer, 0, sizeof(buffer));
+            int n = read(sock, buffer, sizeof(buffer));
+            if (strncmp(buffer, "START", 5) == 0) {
+                char out_name[120];
+                snprintf(out_name, sizeof(out_name), "downloaded_%s", fname);
+                FILE *fp = fopen(out_name, "wb");
+
+                while ((n = read(sock, buffer, sizeof(buffer))) > 0) {
+                    if (strstr(buffer, "EOF_REACHED")) {
+                        fwrite(buffer, 1, n - 11, fp);
+                        break;
+                    }
+                    fwrite(buffer, 1, n, fp);
+                }
+                fclose(fp);
+                printf("File downloaded successfully as '%s'\n", out_name);
+            } else {
+                printf("%s\n", buffer);
+            }
+        } else if (choice == 3) {
+            break;
+        }
+    }
+
+    close(sock);
+    return 0;
+}
+
+
+
+******************************
+
+4. Chat Notification System with Broadcast
+Server (chat_server.c)
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+#include <pthread.h>
+
+#define PORT 9004
+#define MAX_CLIENTS 50
+#define BUFFER_SIZE 2048
+
+int clients[MAX_CLIENTS];
+int client_count = 0;
+pthread_mutex_t clients_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+void broadcast_message(const char *msg, int sender_fd) {
+    pthread_mutex_lock(&clients_mutex);
+    for (int i = 0; i < client_count; i++) {
+        if (clients[i] != sender_fd) {
+            send(clients[i], msg, strlen(msg), 0);
+        }
+    }
+    pthread_mutex_unlock(&clients_mutex);
+}
+
+void remove_client(int fd) {
+    pthread_mutex_lock(&clients_mutex);
+    for (int i = 0; i < client_count; i++) {
+        if (clients[i] == fd) {
+            for (int j = i; j < client_count - 1; j++) {
+                clients[j] = clients[j + 1];
+            }
+            client_count--;
+            break;
+        }
+    }
+    pthread_mutex_unlock(&clients_mutex);
+}
+
+void *client_handler(void *arg) {
+    int sock = *(int *)arg;
+    free(arg);
+    char buffer[BUFFER_SIZE];
+    char leave_msg[128];
+
+    while (1) {
+        memset(buffer, 0, sizeof(buffer));
+        int bytes = read(sock, buffer, sizeof(buffer));
+        if (bytes <= 0) break; // Client disconnected
+
+        broadcast_message(buffer, sock);
+    }
+
+    snprintf(leave_msg, sizeof(leave_msg), "[Server Notification] A user has left the chat.\n");
+    printf("Client disconnected on socket %d\n", sock);
+    remove_client(sock);
+    broadcast_message(leave_msg, sock);
+    close(sock);
+    return NULL;
+}
+
+int main() {
+    int server_fd = socket(AF_INET, SOCK_STREAM, 0);
+    int opt = 1;
+    setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+
+    struct sockaddr_in addr = { .sin_family = AF_INET, .sin_port = htons(PORT), .sin_addr.s_addr = INADDR_ANY };
+    bind(server_fd, (struct sockaddr *)&addr, sizeof(addr));
+    listen(server_fd, 20);
+    printf("Chat Server listening on port %d...\n", PORT);
+
+    while (1) {
+        int client_sock = accept(server_fd, NULL, NULL);
+
+        pthread_mutex_lock(&clients_mutex);
+        if (client_count < MAX_CLIENTS) {
+            clients[client_count++] = client_sock;
+            int *arg = malloc(sizeof(int));
+            *arg = client_sock;
+            pthread_t tid;
+            pthread_create(&tid, NULL, client_handler, arg);
+            pthread_detach(tid);
+
+            char join_msg[128];
+            snprintf(join_msg, sizeof(join_msg), "[Server Notification] A new user joined the chat.\n");
+            pthread_mutex_unlock(&clients_mutex);
+            broadcast_message(join_msg, client_sock);
+        } else {
+            pthread_mutex_unlock(&clients_mutex);
+            close(client_sock);
+        }
+    }
+
+    close(server_fd);
+    return 0;
+}
+
+
+******************************
+Client (chat_client.c)
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+#include <pthread.h>
+
+#define PORT 9004
+#define BUFFER_SIZE 2048
+
+int sock = 0;
+char username[50];
+
+void *recv_handler(void *arg) {
+    char buffer[BUFFER_SIZE];
+    while (1) {
+        memset(buffer, 0, sizeof(buffer));
+        int bytes = read(sock, buffer, sizeof(buffer));
+        if (bytes <= 0) {
+            printf("\nDisconnected from server.\n");
+            exit(0);
+        }
+        printf("%s", buffer);
+        fflush(stdout);
+    }
+    return NULL;
+}
+
+int main() {
+    sock = socket(AF_INET, SOCK_STREAM, 0);
+    struct sockaddr_in serv_addr = { .sin_family = AF_INET, .sin_port = htons(PORT) };
+    inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr);
+
+    if (connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
+        printf("Connection failed.\n");
+        return -1;
+    }
+
+    printf("Enter your chat username: ");
+    fgets(username, sizeof(username), stdin);
+    username[strcspn(username, "\n")] = 0;
+
+    pthread_t recv_thread;
+    pthread_create(&recv_thread, NULL, recv_handler, NULL);
+    pthread_detach(recv_thread);
+
+    printf("--- Joined Chat Room (Type messages and press Enter) ---\n");
+
+    char message[BUFFER_SIZE];
+    char formatted_msg[BUFFER_SIZE + 64];
+
+    while (fgets(message, sizeof(message), stdin)) {
+        if (strcmp(message, "exit\n") == 0) break;
+        snprintf(formatted_msg, sizeof(formatted_msg), "[%s]: %s", username, message);
+        send(sock, formatted_msg, strlen(formatted_msg), 0);
+    }
+
+    close(sock);
+    return 0;
+}
