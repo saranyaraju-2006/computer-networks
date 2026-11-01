@@ -1,0 +1,93 @@
+/*3. Multi-Service Authenticated Server
+Server (q3_server.c)*/
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+#include <time.h>
+#include <sys/utsname.h>
+
+#define PORT 8082
+
+void log_activity(const char *client_ip, const char *action) {
+    FILE *log_file = fopen("server_log.txt", "a");
+    if (log_file) {
+        time_t now = time(NULL);
+        char *time_str = ctime(&now);
+        time_str[strlen(time_str)-1] = '\0'; // remove newline
+        fprintf(log_file, "[%s] %s - %s\n", time_str, client_ip, action);
+        fclose(log_file);
+    }
+}
+
+int main() {
+    int server_fd, client_socket;
+    struct sockaddr_in address, client_addr;
+    socklen_t addrlen = sizeof(client_addr);
+    char buffer[1024] = {0};
+    
+    server_fd = socket(AF_INET, SOCK_STREAM, 0);
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = INADDR_ANY;
+    address.sin_port = htons(PORT);
+    
+    bind(server_fd, (struct sockaddr *)&address, sizeof(address));
+    listen(server_fd, 3);
+    printf("Multi-Service Server listening on %d...\n", PORT);
+    
+    client_socket = accept(server_fd, (struct sockaddr *)&client_addr, &addrlen);
+    char *client_ip = inet_ntoa(client_addr.sin_addr);
+    int client_port = ntohs(client_addr.sin_port);
+    
+    // Authentication
+    read(client_socket, buffer, 1024);
+    buffer[strcspn(buffer, "\n")] = 0;
+    if (strcmp(buffer, "admin:password123") == 0) {
+        printf("Successful login from %s:%d\n", client_ip, client_port); // Print IP & Port as requested
+        send(client_socket, "AUTH_SUCCESS", 12, 0);
+        log_activity(client_ip, "Login Successful");
+    } else {
+        send(client_socket, "AUTH_FAIL", 9, 0);
+        log_activity(client_ip, "Failed Login Attempt");
+        close(client_socket);
+        return 0;
+    }
+
+    // Service Menu Loop
+    while (1) {
+        memset(buffer, 0, 1024);
+        if (read(client_socket, buffer, 1024) <= 0) break;
+        int choice = atoi(buffer);
+        char response[2048] = {0};
+        
+        if (choice == 1) { // Upload stub
+            strcpy(response, "File upload feature placeholder.");
+            log_activity(client_ip, "Requested File Upload");
+        } else if (choice == 2) { // Download stub
+            strcpy(response, "File download feature placeholder.");
+            log_activity(client_ip, "Requested File Download");
+        } else if (choice == 3) { // Date/Time
+            time_t now = time(NULL);
+            strcpy(response, ctime(&now));
+            log_activity(client_ip, "Requested Date/Time");
+        } else if (choice == 4) { // Sys Info
+            struct utsname sysinfo;
+            uname(&sysinfo);
+            snprintf(response, sizeof(response), "OS: %s, Release: %s, Machine: %s", 
+                     sysinfo.sysname, sysinfo.release, sysinfo.machine);
+            log_activity(client_ip, "Requested Sys Info");
+        } else if (choice == 5) { // Exit
+            log_activity(client_ip, "Terminated session");
+            break;
+        } else {
+            strcpy(response, "Invalid request.");
+            log_activity(client_ip, "Invalid request");
+        }
+        send(client_socket, response, strlen(response), 0);
+    }
+    close(client_socket);
+    close(server_fd);
+    return 0;
+}
