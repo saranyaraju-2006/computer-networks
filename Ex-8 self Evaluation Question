@@ -1,0 +1,427 @@
+To make these pairs robust and distinct, the Clients handle the menus and user inputs, sending formatted command strings (e.g., 1 for search, 2 101 to book ID 101) to the Servers. The servers iteratively process one client at a time, update their local databases, log activities to a file, and return the response.
+
+
+
+1. Online Railway Reservation Client (railway_client.c)
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+#include <time.h>
+
+#define PORT 8081
+
+struct Train { int id; char name[30]; char route[30]; int seats; float fare; };
+struct Train db[2] = {{101, "Shatabdi", "NY-DC", 50, 120.0}, {102, "Express", "LA-SF", 30, 85.0}};
+
+void log_activity(const char *msg) {
+    FILE *f = fopen("railway_log.txt", "a");
+    if(f) {
+        time_t t = time(NULL); char *tm = ctime(&t); tm[strlen(tm)-1] = 0;
+        fprintf(f, "[%s] %s\n", tm, msg); fclose(f);
+    }
+}
+
+int main() {
+    int server_sock = socket(AF_INET, SOCK_STREAM, 0);
+    struct sockaddr_in addr = { .sin_family = AF_INET, .sin_port = htons(PORT), .sin_addr.s_addr = INADDR_ANY };
+    bind(server_sock, (struct sockaddr*)&addr, sizeof(addr));
+    listen(server_sock, 5);
+    printf("Iterative Railway Server listening on %d...\n", PORT);
+
+    while(1) {
+        int client_sock = accept(server_sock, NULL, NULL);
+        char buffer[1024], response[2048];
+        log_activity("Client connected.");
+        
+        while(read(client_sock, buffer, sizeof(buffer)) > 0) {
+            int cmd = 0, id = 0;
+            sscanf(buffer, "%d %d", &cmd, &id);
+            memset(response, 0, sizeof(response));
+            
+            if (cmd == 1) { // Search
+                strcpy(response, "ID\tName\tRoute\tSeats\tFare\n");
+                for(int i=0; i<2; i++) {
+                    char temp[100];
+                    sprintf(temp, "%d\t%s\t%s\t%d\t%.2f\n", db[i].id, db[i].name, db[i].route, db[i].seats, db[i].fare);
+                    strcat(response, temp);
+                }
+                log_activity("Searched trains.");
+            } else if (cmd == 2 || cmd == 3) {
+                int found = -1;
+                for(int i=0; i<2; i++) if (db[i].id == id) found = i;
+                if (found != -1) {
+                    if (cmd == 2 && db[found].seats > 0) {
+                        db[found].seats--; strcpy(response, "Booking Successful!"); log_activity("Ticket booked.");
+                    } else if (cmd == 3) {
+                        db[found].seats++; strcpy(response, "Cancellation Successful!"); log_activity("Ticket cancelled.");
+                    } else {
+                        strcpy(response, "Error: No seats available."); log_activity("Booking failed (full).");
+                    }
+                } else {
+                    strcpy(response, "Error: Invalid Train ID."); log_activity("Invalid Train ID requested.");
+                }
+            }
+            send(client_sock, response, strlen(response), 0);
+            memset(buffer, 0, sizeof(buffer));
+        }
+        close(client_sock);
+        log_activity("Client disconnected.");
+    }
+    return 0;
+}
+
+****************************************
+
+Client (railway_client.c)
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+
+#define PORT 8081
+
+int main() {
+    int sock = socket(AF_INET, SOCK_STREAM, 0);
+    struct sockaddr_in serv_addr = { .sin_family = AF_INET, .sin_port = htons(PORT) };
+    inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr);
+    if (connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) return -1;
+
+    char buffer[2048];
+    while(1) {
+        printf("\n1. Search Trains\n2. Book Ticket\n3. Cancel Ticket\n4. Exit\nChoice: ");
+        int choice, id = 0; scanf("%d", &choice);
+        
+        if (choice == 4) break;
+        if (choice == 2 || choice == 3) {
+            printf("Enter Train ID: "); scanf("%d", &id);
+        }
+        
+        sprintf(buffer, "%d %d", choice, id);
+        send(sock, buffer, strlen(buffer), 0);
+        
+        memset(buffer, 0, sizeof(buffer));
+        read(sock, buffer, sizeof(buffer));
+        printf("\nServer Response:\n%s\n", buffer);
+    }
+    close(sock); return 0;
+}
+
+
+******************************
+
+2. Hospital Appointment Management System
+Server (hospital_server.c)
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+#include <time.h>
+
+#define PORT 8082
+
+struct Doctor { int id; char name[30]; char timing[20]; int slots; };
+struct Doctor db[2] = {{1, "Dr. Smith", "10AM-12PM", 5}, {2, "Dr. Adams", "2PM-4PM", 2}};
+
+void log_txn(const char *msg) {
+    FILE *f = fopen("hospital_log.txt", "a");
+    if(f) {
+        time_t t = time(NULL); char *tm = ctime(&t); tm[strlen(tm)-1] = 0;
+        fprintf(f, "[%s] %s\n", tm, msg); fclose(f);
+    }
+}
+
+int main() {
+    int server_sock = socket(AF_INET, SOCK_STREAM, 0);
+    struct sockaddr_in addr = { .sin_family = AF_INET, .sin_port = htons(PORT), .sin_addr.s_addr = INADDR_ANY };
+    bind(server_sock, (struct sockaddr*)&addr, sizeof(addr)); listen(server_sock, 5);
+    printf("Iterative Hospital Server listening on %d...\n", PORT);
+
+    while(1) {
+        int client_sock = accept(server_sock, NULL, NULL);
+        char buffer[1024], response[2048];
+        log_txn("Patient connected.");
+        
+        while(read(client_sock, buffer, sizeof(buffer)) > 0) {
+            int cmd = 0, id = 0; sscanf(buffer, "%d %d", &cmd, &id);
+            memset(response, 0, sizeof(response));
+            
+            if (cmd == 1) { 
+                strcpy(response, "ID\tName\tTiming\tSlots\n");
+                for(int i=0; i<2; i++) {
+                    char temp[100]; sprintf(temp, "%d\t%s\t%s\t%d\n", db[i].id, db[i].name, db[i].timing, db[i].slots);
+                    strcat(response, temp);
+                }
+                log_txn("Searched doctors.");
+            } else if (cmd == 2 || cmd == 3) {
+                int found = -1;
+                for(int i=0; i<2; i++) if (db[i].id == id) found = i;
+                if (found != -1) {
+                    if (cmd == 2 && db[found].slots > 0) {
+                        db[found].slots--; strcpy(response, "Appointment Confirmed!"); log_txn("Appointment booked.");
+                    } else if (cmd == 3) {
+                        db[found].slots++; strcpy(response, "Appointment Cancelled!"); log_txn("Appointment cancelled.");
+                    } else {
+                        strcpy(response, "Error: No slots available."); log_txn("Booking failed.");
+                    }
+                } else { strcpy(response, "Error: Invalid Doctor ID."); log_txn("Invalid ID."); }
+            }
+            send(client_sock, response, strlen(response), 0);
+            memset(buffer, 0, sizeof(buffer));
+        }
+        close(client_sock); log_txn("Patient disconnected.");
+    }
+    return 0;
+}
+
+******************************
+Client (hospital_client.c)
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+
+#define PORT 8082
+
+int main() {
+    int sock = socket(AF_INET, SOCK_STREAM, 0);
+    struct sockaddr_in serv_addr = { .sin_family = AF_INET, .sin_port = htons(PORT) };
+    inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr);
+    if (connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) return -1;
+
+    char buffer[2048];
+    while(1) {
+        printf("\n1. View Doctors\n2. Book Appointment\n3. Cancel Appointment\n4. Exit\nChoice: ");
+        int choice, id = 0; scanf("%d", &choice);
+        
+        if (choice == 4) break;
+        if (choice == 2 || choice == 3) {
+            printf("Enter Doctor ID: "); scanf("%d", &id);
+        }
+        
+        sprintf(buffer, "%d %d", choice, id);
+        send(sock, buffer, strlen(buffer), 0);
+        
+        memset(buffer, 0, sizeof(buffer));
+        read(sock, buffer, sizeof(buffer));
+        printf("\nServer Response:\n%s\n", buffer);
+    }
+    close(sock); return 0;
+}
+
+
+
+******************************************
+
+3. Movie Ticket Booking System
+Server (movie_server.c)
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+
+#define PORT 8083
+
+struct Movie { int id; char title[30]; char timing[20]; int seats; float price; };
+struct Movie db[2] = {{1, "Inception", "18:00", 100, 15.5}, {2, "Matrix", "21:00", 50, 12.0}};
+
+int main() {
+    int server_sock = socket(AF_INET, SOCK_STREAM, 0);
+    struct sockaddr_in addr = { .sin_family = AF_INET, .sin_port = htons(PORT), .sin_addr.s_addr = INADDR_ANY };
+    bind(server_sock, (struct sockaddr*)&addr, sizeof(addr)); listen(server_sock, 5);
+    printf("Iterative Movie Server listening on %d...\n", PORT);
+
+    while(1) {
+        int client_sock = accept(server_sock, NULL, NULL);
+        char buffer[1024], response[2048];
+        
+        while(read(client_sock, buffer, sizeof(buffer)) > 0) {
+            int cmd = 0, id = 0; sscanf(buffer, "%d %d", &cmd, &id);
+            memset(response, 0, sizeof(response));
+            
+            if (cmd == 1) { 
+                strcpy(response, "ID\tTitle\tTiming\tSeats\tPrice\n");
+                for(int i=0; i<2; i++) {
+                    char temp[100]; sprintf(temp, "%d\t%s\t%s\t%d\t$%.2f\n", db[i].id, db[i].title, db[i].timing, db[i].seats, db[i].price);
+                    strcat(response, temp);
+                }
+            } else if (cmd == 2 || cmd == 3) {
+                int found = -1;
+                for(int i=0; i<2; i++) if (db[i].id == id) found = i;
+                if (found != -1) {
+                    if (cmd == 2 && db[found].seats > 0) {
+                        db[found].seats--; strcpy(response, "Ticket Booked Successfully!");
+                    } else if (cmd == 3) {
+                        db[found].seats++; strcpy(response, "Ticket Cancelled Successfully!");
+                    } else {
+                        strcpy(response, "Error: House Full.");
+                    }
+                } else { strcpy(response, "Error: Invalid Movie ID."); }
+            }
+            send(client_sock, response, strlen(response), 0);
+            memset(buffer, 0, sizeof(buffer));
+        }
+        close(client_sock);
+    }
+    return 0;
+}
+
+
+
+******************************
+Client (movie_client.c)
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+
+#define PORT 8083
+
+int main() {
+    int sock = socket(AF_INET, SOCK_STREAM, 0);
+    struct sockaddr_in serv_addr = { .sin_family = AF_INET, .sin_port = htons(PORT) };
+    inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr);
+    if (connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) return -1;
+
+    char buffer[2048];
+    while(1) {
+        printf("\n1. View Movies\n2. Book Ticket\n3. Cancel Ticket\n4. Exit\nChoice: ");
+        int choice, id = 0; scanf("%d", &choice);
+        
+        if (choice == 4) break;
+        if (choice == 2 || choice == 3) {
+            printf("Enter Movie ID: "); scanf("%d", &id);
+        }
+        
+        sprintf(buffer, "%d %d", choice, id);
+        send(sock, buffer, strlen(buffer), 0);
+        
+        memset(buffer, 0, sizeof(buffer));
+        read(sock, buffer, sizeof(buffer));
+        printf("\nServer Response:\n%s\n", buffer);
+    }
+    close(sock); return 0;
+}
+
+
+******************************
+
+4. College Library Management System
+Server (library_server.c)
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+
+#define PORT 8084
+
+struct Book { int id; char title[30]; char author[30]; char cat[20]; int available; };
+struct Book db[2] = {{101, "C_Programming", "Dennis_Ritchie", "CS", 1}, {102, "Data_Networks", "Tanenbaum", "CS", 1}};
+
+int main() {
+    int server_sock = socket(AF_INET, SOCK_STREAM, 0);
+    struct sockaddr_in addr = { .sin_family = AF_INET, .sin_port = htons(PORT), .sin_addr.s_addr = INADDR_ANY };
+    bind(server_sock, (struct sockaddr*)&addr, sizeof(addr)); listen(server_sock, 5);
+    printf("Iterative Library Server listening on %d...\n", PORT);
+
+    while(1) {
+        int client_sock = accept(server_sock, NULL, NULL);
+        char buffer[1024], response[2048];
+        
+        while(read(client_sock, buffer, sizeof(buffer)) > 0) {
+            int cmd = 0; char query[30] = "";
+            sscanf(buffer, "%d %s", &cmd, query);
+            memset(response, 0, sizeof(response));
+            
+            if (cmd == 1) { // Search
+                strcpy(response, "ID\tTitle\tAuthor\tCategory\tAvailable\n");
+                for(int i=0; i<2; i++) {
+                    if (strlen(query) == 0 || strstr(db[i].title, query) || strstr(db[i].author, query)) {
+                        char temp[120]; sprintf(temp, "%d\t%s\t%s\t%s\t%s\n", db[i].id, db[i].title, db[i].author, db[i].cat, db[i].available ? "Yes":"No");
+                        strcat(response, temp);
+                    }
+                }
+            } else if (cmd == 2 || cmd == 3) {
+                int id = atoi(query), found = -1;
+                for(int i=0; i<2; i++) if (db[i].id == id) found = i;
+                if (found != -1) {
+                    if (cmd == 2 && db[found].available == 1) {
+                        db[found].available = 0; strcpy(response, "Book Issued Successfully!");
+                    } else if (cmd == 3 && db[found].available == 0) {
+                        db[found].available = 1; strcpy(response, "Book Returned Successfully!");
+                    } else {
+                        strcpy(response, "Operation Failed (Check availability).");
+                    }
+                } else { strcpy(response, "Error: Invalid Book ID."); }
+            } else if (cmd == 4) {
+                strcpy(response, "Issued Books:\n");
+                for(int i=0; i<2; i++) {
+                    if(db[i].available == 0) {
+                        char temp[120]; sprintf(temp, "%d\t%s\t%s\n", db[i].id, db[i].title, db[i].author);
+                        strcat(response, temp);
+                    }
+                }
+            }
+            send(client_sock, response, strlen(response), 0);
+            memset(buffer, 0, sizeof(buffer));
+        }
+        close(client_sock); // Terminates client connection gracefully before accepting next
+    }
+    return 0;
+}
+
+
+
+******************************
+Client (library_client.c)
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+
+#define PORT 8084
+
+int main() {
+    int sock = socket(AF_INET, SOCK_STREAM, 0);
+    struct sockaddr_in serv_addr = { .sin_family = AF_INET, .sin_port = htons(PORT) };
+    inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr);
+    if (connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) return -1;
+
+    char buffer[2048];
+    while(1) {
+        printf("\n1. Search Books\n2. Issue Book\n3. Return Book\n4. View Issued Books\n5. Exit\nChoice: ");
+        int choice; char query[30] = ""; scanf("%d", &choice);
+        
+        if (choice == 5) break;
+        if (choice == 1) {
+            printf("Enter Search Query (or 'all'): "); scanf("%s", query);
+            if (strcmp(query, "all") == 0) strcpy(query, "");
+        } else if (choice == 2 || choice == 3) {
+            printf("Enter Book ID: "); scanf("%s", query);
+        }
+        
+        sprintf(buffer, "%d %s", choice, query);
+        send(sock, buffer, strlen(buffer), 0);
+        
+        memset(buffer, 0, sizeof(buffer));
+        read(sock, buffer, sizeof(buffer));
+        printf("\nServer Response:\n%s\n", buffer);
+    }
+    close(sock); return 0;
+}
