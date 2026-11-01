@@ -1,0 +1,43 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+
+#define SERVER_PORT 8883
+
+struct Packet {
+    char data[256];
+    int checksum;
+};
+
+int main(int argc, char* argv[]) {
+    int s, i, local_sum = 0;
+    struct Packet pkt;
+    struct sockaddr_in servAddr;
+
+    if (argc != 2) { printf("Usage: %s <IP>\n", argv[0]); exit(1); }
+
+    s = socket(PF_INET, SOCK_DGRAM, 0);
+    memset(&servAddr, 0, sizeof(servAddr));
+    servAddr.sin_family = AF_INET;
+    servAddr.sin_port = htons(SERVER_PORT);
+    inet_pton(AF_INET, argv[1], &servAddr.sin_addr);
+
+    sendto(s, "READY", 5, 0, (struct sockaddr *)&servAddr, sizeof(servAddr));
+    recvfrom(s, &pkt, sizeof(pkt), 0, NULL, NULL);
+
+    printf("Data Received: %s\n", pkt.data);
+    
+    // Checksum verification
+    for(i=0; i<strlen(pkt.data); i++) local_sum += pkt.data[i];
+
+    if(local_sum == pkt.checksum) {
+        printf("RESULT: Checksum Match. Data is correct.\n");
+    } else {
+        printf("RESULT: Checksum Mismatch! Error Detected.\n");
+    }
+
+    close(s);
+    return 0;
+}
