@@ -1,0 +1,241 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#define MAX 50
+#define INF 999999
+
+/* --- Data Structures --- */
+
+typedef struct Edge {
+    int destination;
+    int weight;
+    struct Edge *next;
+} Edge;
+
+typedef struct {
+    char name[20];
+} Node;
+
+typedef struct {
+    int vertices;
+    Node node[MAX];
+    Edge *head[MAX];
+} Graph;
+
+typedef struct {
+    int vertex;
+    int distance;
+} HeapNode;
+
+typedef struct {
+    int size;
+    HeapNode array[MAX];
+    int position[MAX];
+} MinHeap;
+
+/* --- Graph Functions --- */
+
+void initializeGraph(Graph *g) {
+    int i;
+    printf("Enter number of routers: ");
+    scanf("%d", &g->vertices);
+    for (i = 0; i < g->vertices; i++) {
+        g->head[i] = NULL;
+    }
+}
+
+void readNodes(Graph *g) {
+    int i;
+    printf("\nEnter Router Names:\n");
+    for (i = 0; i < g->vertices; i++) {
+        printf("Router %d: ", i);
+        scanf("%19s", g->node[i].name);
+    }
+}
+
+void insertEdge(Graph *g, int src, int dest, int weight) {
+    Edge *newNode = (Edge *)malloc(sizeof(Edge));
+    newNode->destination = dest;
+    newNode->weight = weight;
+    newNode->next = g->head[src];
+    g->head[src] = newNode;
+}
+
+void readEdges(Graph *g) {
+    int edges, src, dest, cost, i;
+    printf("\nEnter number of links: ");
+    scanf("%d", &edges);
+    printf("\nRouter Map:\n");
+    for (i = 0; i < g->vertices; i++) {
+        printf("%d -> %s\n", i, g->node[i].name);
+    }
+
+    for (i = 0; i < edges; i++) {
+        printf("\nLink %d (Src Dest Cost): ", i + 1);
+        scanf("%d %d %d", &src, &dest, &cost);
+        if (src < 0 || src >= g->vertices || dest < 0 || dest >= g->vertices || cost < 0) {
+            printf("Invalid input. Try again.\n");
+            i--;
+            continue;
+        }
+        insertEdge(g, src, dest, cost);
+        insertEdge(g, dest, src, cost);
+    }
+}
+
+/* --- Min-Heap Functions --- */
+
+void swapHeapNode(HeapNode *a, HeapNode *b) {
+    HeapNode temp = *a; *a = *b; *b = temp;
+}
+
+void heapify(MinHeap *heap, int idx) {
+    int smallest = idx, left = 2 * idx + 1, right = 2 * idx + 2;
+    if (left < heap->size && heap->array[left].distance < heap->array[smallest].distance) smallest = left;
+    if (right < heap->size && heap->array[right].distance < heap->array[smallest].distance) smallest = right;
+    if (smallest != idx) {
+        heap->position[heap->array[smallest].vertex] = idx;
+        heap->position[heap->array[idx].vertex] = smallest;
+        swapHeapNode(&heap->array[smallest], &heap->array[idx]);
+        heapify(heap, smallest);
+    }
+}
+
+HeapNode extractMin(MinHeap *heap) {
+    HeapNode root = heap->array[0];
+    HeapNode lastNode = heap->array[heap->size - 1];
+    heap->array[0] = lastNode;
+    heap->position[lastNode.vertex] = 0;
+    heap->size--;
+    heapify(heap, 0);
+    return root;
+}
+
+void decreaseKey(MinHeap *heap, int v, int dist) {
+    int i = heap->position[v];
+    heap->array[i].distance = dist;
+    while (i && heap->array[i].distance < heap->array[(i - 1) / 2].distance) {
+        heap->position[heap->array[i].vertex] = (i - 1) / 2;
+        heap->position[heap->array[(i - 1) / 2].vertex] = i;
+        swapHeapNode(&heap->array[i], &heap->array[(i - 1) / 2]);
+        i = (i - 1) / 2;
+    }
+}
+
+/* --- Simulation Helpers --- */
+
+void displayPSet(Graph *g, int pOrder[], int pCount) {
+    int i;
+    printf("P = { ");
+    for (i = 0; i < pCount; i++) {
+        printf("%s%s", g->node[pOrder[i]].name, (i < pCount - 1 ? ", " : ""));
+    }
+    printf(" }\n");
+}
+
+/* REMOVED STATUS COLUMN HERE */
+void displayDistanceTable(Graph *g, int dist[], int parent[]) {
+    int i;
+    printf("\n%-10s %-10s %-10s\n", "Router", "Cost", "Parent");
+    printf("------------------------------\n");
+    for (i = 0; i < g->vertices; i++) {
+        printf("%-10s ", g->node[i].name);
+        if (dist[i] == INF) printf("%-10s ", "INF");
+        else printf("%-10d ", dist[i]);
+        printf("%-10s\n", (parent[i] == -1 ? "-" : g->node[parent[i]].name));
+    }
+}
+
+/* --- Routing Table Logic --- */
+
+void printPath(Graph *g, int parent[], int dest) {
+    if (parent[dest] == -1) {
+        printf("%s", g->node[dest].name);
+        return;
+    }
+    printPath(g, parent, parent[dest]);
+    printf(" -> %s", g->node[dest].name);
+}
+
+int findNextHop(int parent[], int src, int dest) {
+    int curr;
+    if (dest == src) return src;
+    curr = dest;
+    while (parent[curr] != -1 && parent[curr] != src) {
+        curr = parent[curr];
+    }
+    return curr;
+}
+
+/* --- Dijkstra Algorithm Simulation --- */
+
+void runDijkstra(Graph *g, int source) {
+    int dist[MAX], parent[MAX], permanent[MAX], pOrder[MAX], pCount = 0, i, nh;
+    MinHeap heap;
+    Edge *curr;
+
+    heap.size = g->vertices;
+
+    printf("\n\n====================================================");
+    printf("\n   DIJKSTRA STEP-BY-STEP FROM SOURCE: %s", g->node[source].name);
+    printf("\n====================================================\n");
+
+    for (i = 0; i < g->vertices; i++) {
+        dist[i] = INF; parent[i] = -1; permanent[i] = 0;
+        heap.array[i].vertex = i; heap.array[i].distance = INF;
+        heap.position[i] = i;
+    }
+    dist[source] = 0;
+    decreaseKey(&heap, source, 0);
+
+    while (heap.size != 0) {
+        HeapNode minNode = extractMin(&heap);
+        int u = minNode.vertex;
+        if (dist[u] == INF) break;
+
+        permanent[u] = 1;
+        pOrder[pCount++] = u;
+
+        printf("\nSelected Router: %s (Cost: %d)\n", g->node[u].name, dist[u]);
+        displayPSet(g, pOrder, pCount);
+
+        curr = g->head[u];
+        while (curr) {
+            int v = curr->destination;
+            if (!permanent[v] && dist[u] + curr->weight < dist[v]) {
+                dist[v] = dist[u] + curr->weight;
+                parent[v] = u;
+                decreaseKey(&heap, v, dist[v]);
+                printf("  Updated %s via %s: New Cost %d\n", g->node[v].name, g->node[u].name, dist[v]);
+            }
+            curr = curr->next;
+        }
+        /* CALLED TABLE DISPLAY WITHOUT STATUS */
+        displayDistanceTable(g, dist, parent);
+    }
+
+    printf("\nFINAL ROUTING TABLE FOR %s\n", g->node[source].name);
+    printf("%-10s %-10s %-10s %-20s\n", "Dest", "NextHop", "Cost", "Path");
+    printf("----------------------------------------------------------\n");
+    for (i = 0; i < g->vertices; i++) {
+        nh = findNextHop(parent, source, i);
+        printf("%-10s %-10s %-10d ", g->node[i].name, g->node[nh].name, dist[i]);
+        printPath(g, parent, i);
+        printf("\n");
+    }
+}
+
+int main() {
+    Graph g;
+    int i;
+    initializeGraph(&g);
+    readNodes(&g);
+    readEdges(&g);
+
+    for (i = 0; i < g.vertices; i++) {
+        runDijkstra(&g, i);
+    }
+
+    return 0;
+}
