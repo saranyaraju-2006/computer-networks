@@ -1,0 +1,51 @@
+//Client (q3_client.c)
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+
+#define PORT 8082
+
+int main() {
+    int sock = socket(AF_INET, SOCK_STREAM, 0);
+    struct sockaddr_in serv_addr;
+    char buffer[2048] = {0};
+    
+    serv_addr.sin_family = AF_INET;
+    serv_addr.sin_port = htons(PORT);
+    inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr);
+    connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr));
+    
+    char user[50], pass[50], credentials[100];
+    printf("Username: "); scanf("%s", user);
+    printf("Password: "); scanf("%s", pass);
+    sprintf(credentials, "%s:%s", user, pass);
+    
+    send(sock, credentials, strlen(credentials), 0);
+    read(sock, buffer, 1024);
+    
+    if (strcmp(buffer, "AUTH_SUCCESS") != 0) {
+        printf("Authentication failed.\n");
+        close(sock);
+        return 0;
+    }
+    printf("Authentication successful!\n");
+    
+    while(1) {
+        printf("\n1. Upload File\n2. Download File\n3. Get Server Date/Time\n4. Get Sys Info\n5. Exit\nChoice: ");
+        int choice;
+        scanf("%d", &choice);
+        sprintf(buffer, "%d", choice);
+        send(sock, buffer, strlen(buffer), 0);
+        
+        if (choice == 5) break;
+        
+        memset(buffer, 0, 2048);
+        read(sock, buffer, 2048);
+        printf("Server Response: %s\n", buffer);
+    }
+    close(sock);
+    return 0;
+}
