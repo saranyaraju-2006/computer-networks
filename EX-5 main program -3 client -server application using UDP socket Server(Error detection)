@@ -1,0 +1,49 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+
+#define SERVER_PORT 8883
+
+struct Packet {
+    char data[256];
+    int checksum;
+};
+
+int main(void) {
+    int s, i, sum = 0, idx, choice;
+    struct sockaddr_in servAddr, clntAddr;
+    int clntAddrLen = sizeof(clntAddr);
+    struct Packet pkt;
+
+    s = socket(PF_INET, SOCK_DGRAM, 0);
+    memset(&servAddr, 0, sizeof(servAddr));
+    servAddr.sin_family = AF_INET;
+    servAddr.sin_port = htons(SERVER_PORT);
+    servAddr.sin_addr.s_addr = htonl(INADDR_ANY);
+    bind(s, (struct sockaddr *)&servAddr, sizeof(servAddr));
+
+    printf("Enter a word to send: ");
+    scanf("%s", pkt.data);
+
+    // Calculate Checksum
+    for(i=0; i<strlen(pkt.data); i++) sum += pkt.data[i];
+    pkt.checksum = sum;
+
+    printf("Inject error? (1-Yes, 0-No): ");
+    scanf("%d", &choice);
+    if(choice == 1) {
+        printf("Enter index to corrupt (0-%ld): ", strlen(pkt.data)-1);
+        scanf("%d", &idx);
+        pkt.data[idx] = '#'; // Injecting error
+    }
+
+    printf("Waiting for client to connect...\n");
+    recvfrom(s, NULL, 0, 0, (struct sockaddr *)&clntAddr, &clntAddrLen);
+    sendto(s, &pkt, sizeof(pkt), 0, (struct sockaddr *)&clntAddr, clntAddrLen);
+    
+    printf("Packet sent with data: %s\n", pkt.data);
+    close(s);
+    return 0;
+}
