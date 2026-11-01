@@ -1,0 +1,48 @@
+
+//Client (q4_client.c)
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+
+#define PORT 8083
+
+int main() {
+    int sock = socket(AF_INET, SOCK_STREAM, 0);
+    struct sockaddr_in serv_addr;
+    char buffer[2048] = {0};
+    
+    serv_addr.sin_family = AF_INET;
+    serv_addr.sin_port = htons(PORT);
+    inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr);
+    connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr));
+    
+    while(1) {
+        printf("\n1. Add Student\n2. View All\n3. Exit\nChoice: ");
+        int choice;
+        scanf("%d", &choice);
+        
+        if (choice == 3) break;
+        
+        if (choice == 1) {
+            char reg[20], name[50], dept[20], grade;
+            int sem; float marks, cgpa;
+            printf("Enter RegNo, Name, Dept, Sem, Marks, Grade, CGPA (space separated):\n");
+            scanf("%s %s %s %d %f %c %f", reg, name, dept, &sem, &marks, &grade, &cgpa);
+            // Format as command code '1' followed by CSV payload
+            sprintf(buffer, "1 %s,%s,%s,%d,%.2f,%c,%.2f", reg, name, dept, sem, marks, grade, cgpa);
+            send(sock, buffer, strlen(buffer), 0);
+        } else if (choice == 2) {
+            strcpy(buffer, "2");
+            send(sock, buffer, strlen(buffer), 0);
+        }
+        
+        memset(buffer, 0, 2048);
+        read(sock, buffer, 2048);
+        printf("\nServer Response:\n%s\n", buffer);
+    }
+    close(sock);
+    return 0;
+}
