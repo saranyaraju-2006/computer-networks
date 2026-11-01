@@ -1,0 +1,65 @@
+//4. College Library Management System
+//Server (library_server.c)
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+
+#define PORT 8084
+
+struct Book { int id; char title[30]; char author[30]; char cat[20]; int available; };
+struct Book db[2] = {{101, "C_Programming", "Dennis_Ritchie", "CS", 1}, {102, "Data_Networks", "Tanenbaum", "CS", 1}};
+
+int main() {
+    int server_sock = socket(AF_INET, SOCK_STREAM, 0);
+    struct sockaddr_in addr = { .sin_family = AF_INET, .sin_port = htons(PORT), .sin_addr.s_addr = INADDR_ANY };
+    bind(server_sock, (struct sockaddr*)&addr, sizeof(addr)); listen(server_sock, 5);
+    printf("Iterative Library Server listening on %d...\n", PORT);
+
+    while(1) {
+        int client_sock = accept(server_sock, NULL, NULL);
+        char buffer[1024], response[2048];
+        
+        while(read(client_sock, buffer, sizeof(buffer)) > 0) {
+            int cmd = 0; char query[30] = "";
+            sscanf(buffer, "%d %s", &cmd, query);
+            memset(response, 0, sizeof(response));
+            
+            if (cmd == 1) { // Search
+                strcpy(response, "ID\tTitle\tAuthor\tCategory\tAvailable\n");
+                for(int i=0; i<2; i++) {
+                    if (strlen(query) == 0 || strstr(db[i].title, query) || strstr(db[i].author, query)) {
+                        char temp[120]; sprintf(temp, "%d\t%s\t%s\t%s\t%s\n", db[i].id, db[i].title, db[i].author, db[i].cat, db[i].available ? "Yes":"No");
+                        strcat(response, temp);
+                    }
+                }
+            } else if (cmd == 2 || cmd == 3) {
+                int id = atoi(query), found = -1;
+                for(int i=0; i<2; i++) if (db[i].id == id) found = i;
+                if (found != -1) {
+                    if (cmd == 2 && db[found].available == 1) {
+                        db[found].available = 0; strcpy(response, "Book Issued Successfully!");
+                    } else if (cmd == 3 && db[found].available == 0) {
+                        db[found].available = 1; strcpy(response, "Book Returned Successfully!");
+                    } else {
+                        strcpy(response, "Operation Failed (Check availability).");
+                    }
+                } else { strcpy(response, "Error: Invalid Book ID."); }
+            } else if (cmd == 4) {
+                strcpy(response, "Issued Books:\n");
+                for(int i=0; i<2; i++) {
+                    if(db[i].available == 0) {
+                        char temp[120]; sprintf(temp, "%d\t%s\t%s\n", db[i].id, db[i].title, db[i].author);
+                        strcat(response, temp);
+                    }
+                }
+            }
+            send(client_sock, response, strlen(response), 0);
+            memset(buffer, 0, sizeof(buffer));
+        }
+        close(client_sock); // Terminates client connection gracefully before accepting next
+    }
+    return 0;
+}
