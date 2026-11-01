@@ -1,0 +1,213 @@
+1. Go-Back-N Sliding Window Protocol (Self-Question 1)
+This C program simulates the Go-Back-N protocol. It accepts the window size, total frames, and a specific frame to drop to simulate loss and demonstrate retransmission of the entire window from that point.  
+
+
+#include <stdio.h>
+
+int main() {
+    int window_size, total_frames, lost_frame;
+    
+    printf("Enter window size: ");
+    scanf("%d", &window_size);
+    printf("Enter total number of frames to send: ");
+    scanf("%d", &total_frames);
+    printf("Enter the frame number to simulate as lost/corrupted (0 for none): ");
+    scanf("%d", &lost_frame);
+
+    int current_frame = 1;
+    int total_transmissions = 0;
+
+    while (current_frame <= total_frames) {
+        int frames_to_send = window_size;
+        if (current_frame + window_size - 1 > total_frames) {
+            frames_to_send = total_frames - current_frame + 1;
+        }
+
+        printf("\n--- Transmitting Window starting at Frame %d ---\n", current_frame);
+        for (int i = 0; i < frames_to_send; i++) {
+            printf("Transmitting Frame %d\n", current_frame + i);
+            total_transmissions++;
+        }
+
+        int ack_received = 1;
+        for (int i = 0; i < frames_to_send; i++) {
+            int frame_id = current_frame + i;
+            if (frame_id == lost_frame) {
+                printf("! Timeout: Frame %d lost or corrupted.\n", frame_id);
+                printf("! Discarding all subsequent frames in this window.\n");
+                printf("! Go-Back-N triggered. Retransmitting from Frame %d...\n", frame_id);
+                lost_frame = -1; // Reset to prevent infinite loop on the same frame
+                ack_received = 0;
+                break;
+            } else {
+                printf("Acknowledgment received for Frame %d\n", frame_id);
+            }
+        }
+
+        if (ack_received) {
+            current_frame += frames_to_send;
+        }
+    }
+    
+    printf("\nData delivery successful!\n");
+    printf("Total transmissions required: %d\n", total_transmissions);
+    return 0;
+}
+
+**************************
+
+2. Selective Repeat Sliding Window Protocol (Self-Question 2)
+This C program simulates the Selective Repeat protocol. It randomly drops frames during transmission and ensures the sender only retransmits the specific lost frames rather than the entire window, calculating the efficiency at the end.  
+
+
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <time.h>
+
+int main() {
+    int window_size, total_frames;
+    
+    printf("Enter window size: ");
+    scanf("%d", &window_size);
+    printf("Enter total number of frames: ");
+    scanf("%d", &total_frames);
+
+    int *acked = (int *)calloc(total_frames + 1, sizeof(int));
+    int current_frame = 1;
+    int total_transmissions = 0;
+    
+    srand(time(0)); // Seed for random frame loss
+
+    while (current_frame <= total_frames) {
+        printf("\n--- Current Window Start: Frame %d ---\n", current_frame);
+        
+        // Transmit unacknowledged frames in the current window
+        for (int i = 0; i < window_size && (current_frame + i) <= total_frames; i++) {
+            int frame_id = current_frame + i;
+            if (!acked[frame_id]) {
+                printf("Transmitting Frame %d\n", frame_id);
+                total_transmissions++;
+            }
+        }
+
+        // Receive ACKs (Simulate 20% random loss chance)
+        for (int i = 0; i < window_size && (current_frame + i) <= total_frames; i++) {
+            int frame_id = current_frame + i;
+            if (!acked[frame_id]) {
+                if (rand() % 100 < 20) {
+                    printf("! Timeout: Frame %d lost!\n", frame_id);
+                } else {
+                    printf("ACK received for Frame %d\n", frame_id);
+                    acked[frame_id] = 1;
+                }
+            }
+        }
+
+        // Slide window forward past continuously acknowledged frames
+        while (current_frame <= total_frames && acked[current_frame]) {
+            current_frame++;
+        }
+    }
+
+    printf("\nData delivery successful!\n");
+    printf("Total successful frames: %d\n", total_frames);
+    printf("Total transmissions required: %d\n", total_transmissions);
+    printf("Protocol Efficiency: %.2f%%\n", ((float)total_frames / total_transmissions) * 100);
+
+    free(acked);
+    return 0;
+}
+
+**************************
+
+3. LeetCode #239 - Sliding Window Maximum (Hard)
+This C++ implementation uses a double-ended queue (deque) to store indices of array elements, maintaining elements in decreasing order to find the window's maximum in O(N) time.
+
+
+#include <vector>
+#include <deque>
+
+using namespace std;
+
+class Solution {
+public:
+    vector<int> maxSlidingWindow(vector<int>& nums, int k) {
+        deque<int> dq;
+        vector<int> result;
+        
+        for (int i = 0; i < nums.size(); ++i) {
+            // Remove indices that are out of the current sliding window
+            if (!dq.empty() && dq.front() == i - k) {
+                dq.pop_front();
+            }
+            
+            // Remove elements from the back that are smaller than the current element
+            // because they will never be the maximum in this or future windows
+            while (!dq.empty() && nums[dq.back()] < nums[i]) {
+                dq.pop_back();
+            }
+            
+            dq.push_back(i);
+            
+            // Start recording results once the first window is fully established
+            if (i >= k - 1) {
+                result.push_back(nums[dq.front()]);
+            }
+        }
+        return result;
+    }
+};
+
+*****************
+
+4. LeetCode 480 - Sliding Window Median (Hard)
+This C++ implementation uses a multiset (acting as a self-balancing binary search tree) with a tracking pointer (mid) to maintain the median dynamically as the window slides, operating in O(N \log K) time.  
+
+
+#include <vector>
+#include <set>
+#include <iterator>
+
+using namespace std;
+
+class Solution {
+public:
+    vector<double> medianSlidingWindow(vector<int>& nums, int k) {
+        multiset<long long> window;
+        vector<double> result;
+        
+        // Initialize the first window
+        for (int i = 0; i < k; ++i) {
+            window.insert(nums[i]);
+        }
+        
+        // Iterator pointing to the median
+        auto mid = next(window.begin(), k / 2);
+        
+        for (int i = k; ; ++i) {
+            // Calculate and store the median of the current window
+            if (k % 2 == 1) {
+                result.push_back((double)(*mid));
+            } else {
+                result.push_back(((double)(*mid) + *prev(mid)) / 2.0);
+            }
+            
+            if (i == nums.size()) break;
+            
+            // Insert the new incoming element
+            window.insert(nums[i]);
+            if (nums[i] < *mid) {
+                mid--;
+            }
+            
+            // Remove the old outgoing element
+            if (nums[i - k] <= *mid) {
+                mid++;
+            }
+            window.erase(window.lower_bound(nums[i - k]));
+        }
+        
+        return result;
+    }
+};
