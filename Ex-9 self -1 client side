@@ -1,0 +1,56 @@
+
+//Client (exam_client.c)
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+
+#define PORT 9001
+
+int main() {
+    int sock = socket(AF_INET, SOCK_STREAM, 0);
+    struct sockaddr_in serv_addr = { .sin_family = AF_INET, .sin_port = htons(PORT) };
+    inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr);
+
+    if (connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
+        printf("Connection failed.\n");
+        return -1;
+    }
+
+    char username[50], password[50], buffer[2048];
+    printf("Username: "); scanf("%s", username);
+    printf("Password (default: exam123): "); scanf("%s", password);
+
+    snprintf(buffer, sizeof(buffer), "%s %s", username, password);
+    send(sock, buffer, strlen(buffer), 0);
+
+    memset(buffer, 0, sizeof(buffer));
+    read(sock, buffer, sizeof(buffer));
+    if (strcmp(buffer, "AUTH_OK") != 0) {
+        printf("Authentication failed!\n");
+        close(sock);
+        return 0;
+    }
+    printf("Authentication Successful!\n\n");
+
+    // Receive questions
+    memset(buffer, 0, sizeof(buffer));
+    read(sock, buffer, sizeof(buffer));
+    printf("%s", buffer);
+
+    // Send answers
+    char a1, a2, a3;
+    scanf(" %c %c %c", &a1, &a2, &a3);
+    snprintf(buffer, sizeof(buffer), "%c %c %c", a1, a2, a3);
+    send(sock, buffer, strlen(buffer), 0);
+
+    // Receive final score
+    memset(buffer, 0, sizeof(buffer));
+    read(sock, buffer, sizeof(buffer));
+    printf("\n%s", buffer);
+
+    close(sock);
+    return 0;
+}
