@@ -1,0 +1,53 @@
+//Server (movie_server.c)
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+
+#define PORT 8083
+
+struct Movie { int id; char title[30]; char timing[20]; int seats; float price; };
+struct Movie db[2] = {{1, "Inception", "18:00", 100, 15.5}, {2, "Matrix", "21:00", 50, 12.0}};
+
+int main() {
+    int server_sock = socket(AF_INET, SOCK_STREAM, 0);
+    struct sockaddr_in addr = { .sin_family = AF_INET, .sin_port = htons(PORT), .sin_addr.s_addr = INADDR_ANY };
+    bind(server_sock, (struct sockaddr*)&addr, sizeof(addr)); listen(server_sock, 5);
+    printf("Iterative Movie Server listening on %d...\n", PORT);
+
+    while(1) {
+        int client_sock = accept(server_sock, NULL, NULL);
+        char buffer[1024], response[2048];
+        
+        while(read(client_sock, buffer, sizeof(buffer)) > 0) {
+            int cmd = 0, id = 0; sscanf(buffer, "%d %d", &cmd, &id);
+            memset(response, 0, sizeof(response));
+            
+            if (cmd == 1) { 
+                strcpy(response, "ID\tTitle\tTiming\tSeats\tPrice\n");
+                for(int i=0; i<2; i++) {
+                    char temp[100]; sprintf(temp, "%d\t%s\t%s\t%d\t$%.2f\n", db[i].id, db[i].title, db[i].timing, db[i].seats, db[i].price);
+                    strcat(response, temp);
+                }
+            } else if (cmd == 2 || cmd == 3) {
+                int found = -1;
+                for(int i=0; i<2; i++) if (db[i].id == id) found = i;
+                if (found != -1) {
+                    if (cmd == 2 && db[found].seats > 0) {
+                        db[found].seats--; strcpy(response, "Ticket Booked Successfully!");
+                    } else if (cmd == 3) {
+                        db[found].seats++; strcpy(response, "Ticket Cancelled Successfully!");
+                    } else {
+                        strcpy(response, "Error: House Full.");
+                    }
+                } else { strcpy(response, "Error: Invalid Movie ID."); }
+            }
+            send(client_sock, response, strlen(response), 0);
+            memset(buffer, 0, sizeof(buffer));
+        }
+        close(client_sock);
+    }
+    return 0;
+}
