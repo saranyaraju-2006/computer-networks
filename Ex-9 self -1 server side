@@ -1,0 +1,106 @@
+//1. Online Examination Management System (Concurrent Multithreaded)
+//Server (exam_server.c)
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+#include <pthread.h>
+#include <time.h>
+
+#define PORT 9001
+
+pthread_mutex_t log_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+void log_action(const char *user, const char *action) {
+    pthread_mutex_lock(&log_mutex);
+    FILE *fp = fopen("exam_log.txt", "a");
+    if (fp) {
+        time_t now = time(NULL);
+        char *t = ctime(&now);
+        t[strlen(t) - 1] = '\0';
+        fprintf(fp, "[%s] User: %s | Action: %s\n", t, user, action);
+        fclose(fp);
+    }
+    pthread_mutex_unlock(&log_mutex);
+}
+
+void *client_handler(void *arg) {
+    int sock = *(int *)arg;
+    free(arg);
+    char buffer[1024];
+    char username[50] = {0};
+
+    // 1. Authentication
+    memset(buffer, 0, sizeof(buffer));
+    if (read(sock, buffer, sizeof(buffer)) <= 0) { close(sock); return NULL; }
+    
+    char password[50] = {0};
+    sscanf(buffer, "%s %s", username, password);
+
+    // Simple credential check
+    if (strcmp(password, "exam123") == 0) {
+        send(sock, "AUTH_OK", 7, 0);
+        log_action(username, "Login Successful");
+    } else {
+        send(sock, "AUTH_FAIL", 9, 0);
+        log_action(username, "Failed Login Attempt");
+        close(sock);
+        return NULL;
+    }
+
+    // 2. Send Examination Questions
+    const char *questions = 
+        "Q1: What is the default transport layer protocol for HTTP? (A) UDP (B) TCP (C) IP\n"
+        "Q2: What is the size of an IPv4 address? (A) 32-bit (B) 64-bit (C) 128-bit\n"
+        "Q3: Which layer handles routing? (A) Physical (B) Network (C) Data Link\n"
+        "Enter answers as single string (e.g. B A B): ";
+    send(sock, questions, strlen(questions), 0);
+    log_action(username, "Retrieved Examination Questions");
+
+    // 3. Receive Answers & Evaluate
+    memset(buffer, 0, sizeof(buffer));
+    if (read(sock, buffer, sizeof(buffer)) > 0) {
+        char a1, a2, a3;
+        sscanf(buffer, " %c %c %c", &a1, &a2, &a3);
+
+        int score = 0;
+        if (a1 == 'B' || a1 == 'b') score++;
+        if (a2 == 'A' || a2 == 'a') score++;
+        if (a3 == 'B' || a3 == 'b') score++;
+
+        char result[128];
+        snprintf(result, sizeof(result), "Evaluation Complete! Your Score: %d / 3\n", score);
+        send(sock, result, strlen(result), 0);
+
+        char log_res[64];
+        snprintf(log_res, sizeof(log_res), "Submitted exam. Score: %d/3", score);
+        log_action(username, log_res);
+    }
+
+    log_action(username, "Disconnected gracefully");
+    close(sock);
+    return NULL;
+}
+
+int main() {
+    int server_fd = socket(AF_INET, SOCK_STREAM, 0);
+    int opt = 1;
+    setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+
+    struct sockaddr_in addr = { .sin_family = AF_INET, .sin_port = htons(PORT), .sin_addr.s_addr = INADDR_ANY };
+    bind(server_fd, (struct sockaddr *)&addr, sizeof(addr));
+    listen(server_fd, 10);
+    printf("Exam Server running on port %d...\n", PORT);
+
+    while (1) {
+        int *client_sock = malloc(sizeof(int));
+        *client_sock = accept(server_fd, NULL, NULL);
+        pthread_t tid;
+        pthread_create(&tid, NULL, client_handler, client_sock);
+        pthread_detach(tid);
+    }
+    close(server_fd);
+    return 0;
+}
