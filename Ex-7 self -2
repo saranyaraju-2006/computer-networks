@@ -1,0 +1,62 @@
+2. Selective Repeat Sliding Window Protocol (Self-Question 2)
+This C program simulates the Selective Repeat protocol. It randomly drops frames during transmission and ensures the sender only retransmits the specific lost frames rather than the entire window, calculating the efficiency at the end.  
+
+
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <time.h>
+
+int main() {
+    int window_size, total_frames;
+    
+    printf("Enter window size: ");
+    scanf("%d", &window_size);
+    printf("Enter total number of frames: ");
+    scanf("%d", &total_frames);
+
+    int *acked = (int *)calloc(total_frames + 1, sizeof(int));
+    int current_frame = 1;
+    int total_transmissions = 0;
+    
+    srand(time(0)); // Seed for random frame loss
+
+    while (current_frame <= total_frames) {
+        printf("\n--- Current Window Start: Frame %d ---\n", current_frame);
+        
+        // Transmit unacknowledged frames in the current window
+        for (int i = 0; i < window_size && (current_frame + i) <= total_frames; i++) {
+            int frame_id = current_frame + i;
+            if (!acked[frame_id]) {
+                printf("Transmitting Frame %d\n", frame_id);
+                total_transmissions++;
+            }
+        }
+
+        // Receive ACKs (Simulate 20% random loss chance)
+        for (int i = 0; i < window_size && (current_frame + i) <= total_frames; i++) {
+            int frame_id = current_frame + i;
+            if (!acked[frame_id]) {
+                if (rand() % 100 < 20) {
+                    printf("! Timeout: Frame %d lost!\n", frame_id);
+                } else {
+                    printf("ACK received for Frame %d\n", frame_id);
+                    acked[frame_id] = 1;
+                }
+            }
+        }
+
+        // Slide window forward past continuously acknowledged frames
+        while (current_frame <= total_frames && acked[current_frame]) {
+            current_frame++;
+        }
+    }
+
+    printf("\nData delivery successful!\n");
+    printf("Total successful frames: %d\n", total_frames);
+    printf("Total transmissions required: %d\n", total_transmissions);
+    printf("Protocol Efficiency: %.2f%%\n", ((float)total_frames / total_transmissions) * 100);
+
+    free(acked);
+    return 0;
+}
