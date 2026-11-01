@@ -1,0 +1,114 @@
+//2. Hotel Reservation System (Mutex Synchronized)
+//Server (hotel_server.c)
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+#include <pthread.h>
+#include <time.h>
+
+#define PORT 9002
+#define TOTAL_ROOMS 5
+
+int rooms[TOTAL_ROOMS] = {0}; // 0 = Available, 1 = Booked
+pthread_mutex_t booking_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+void log_transaction(const char *action) {
+    FILE *fp = fopen("hotel_log.txt", "a");
+    if (fp) {
+        time_t now = time(NULL);
+        char *t = ctime(&now);
+        t[strlen(t) - 1] = '\0';
+        fprintf(fp, "[%s] %s\n", t, action);
+        fclose(fp);
+    }
+}
+
+void *client_handler(void *arg) {
+    int sock = *(int *)arg;
+    free(arg);
+    char buffer[256], response[1024];
+
+    while (1) {
+        memset(buffer, 0, sizeof(buffer));
+        if (read(sock, buffer, sizeof(buffer)) <= 0) break;
+
+        int cmd = 0, room_no = 0;
+        sscanf(buffer, "%d %d", &cmd, &room_no);
+        memset(response, 0, sizeof(response));
+
+        if (cmd == 1) { // View availability
+            pthread_mutex_lock(&booking_mutex);
+            strcpy(response, "Room Status:\n");
+            for (int i = 0; i < TOTAL_ROOMS; i++) {
+                char temp[32];
+                snprintf(temp, sizeof(temp), "Room %d: %s\n", 101 + i, rooms[i] ? "Booked" : "Available");
+                strcat(response, temp);
+            }
+            pthread_mutex_unlock(&booking_mutex);
+        } else if (cmd == 2) { // Book Room
+            int index = room_no - 101;
+            pthread_mutex_lock(&booking_mutex); // Lock prevents race condition
+            if (index >= 0 && index < TOTAL_ROOMS) {
+                if (rooms[index] == 0) {
+                    rooms[index] = 1;
+                    strcpy(response, "SUCCESS: Room booked successfully!\n");
+                    char log_msg[64];
+                    snprintf(log_msg, sizeof(log_msg), "Room %d booked.", room_no);
+                    log_transaction(log_msg);
+                } else {
+                    strcpy(response, "FAILED: Room is already booked!\n");
+                }
+            } else {
+                strcpy(response, "FAILED: Invalid Room Number.\n");
+            }
+            pthread_mutex_unlock(&booking_mutex);
+        } else if (cmd == 3) { // Cancel Room
+            int index = room_no - 101;
+            pthread_mutex_lock(&booking_mutex);
+            if (index >= 0 && index < TOTAL_ROOMS) {
+                if (rooms[index] == 1) {
+                    rooms[index] = 0;
+                    strcpy(response, "SUCCESS: Room booking cancelled.\n");
+                    char log_msg[64];
+                    snprintf(log_msg, sizeof(log_msg), "Room %d cancelled.", room_no);
+                    log_transaction(log_msg);
+                } else {
+                    strcpy(response, "FAILED: Room was not booked.\n");
+                }
+            } else {
+                strcpy(response, "FAILED: Invalid Room Number.\n");
+            }
+            pthread_mutex_unlock(&booking_mutex);
+        } else if (cmd == 4) {
+            break;
+        }
+        send(sock, response, strlen(response), 0);
+    }
+
+    close(sock);
+    return NULL;
+}
+
+int main() {
+    int server_fd = socket(AF_INET, SOCK_STREAM, 0);
+    int opt = 1;
+    setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+
+    struct sockaddr_in addr = { .sin_family = AF_INET, .sin_port = htons(PORT), .sin_addr.s_addr = INADDR_ANY };
+    bind(server_fd, (struct sockaddr *)&addr, sizeof(addr));
+    listen(server_fd, 10);
+    printf("Hotel Reservation Server listening on port %d...\n", PORT);
+
+    while (1) {
+        int *client_sock = malloc(sizeof(int));
+        *client_sock = accept(server_fd, NULL, NULL);
+        pthread_t tid;
+        pthread_create(&tid, NULL, client_handler, client_sock);
+        pthread_detach(tid);
+    }
+    close(server_fd);
+    return 0;
+}
