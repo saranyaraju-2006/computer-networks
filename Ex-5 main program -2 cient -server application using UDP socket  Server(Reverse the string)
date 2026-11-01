@@ -1,0 +1,29 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+
+#define SERVER_PORT 8882
+
+int main(void) {
+    int s;
+    struct sockaddr_in servAddr, clntAddr;
+    int clntAddrLen = sizeof(clntAddr);
+    char *msg = "NETWORK"; 
+
+    s = socket(PF_INET, SOCK_DGRAM, 0);
+    memset(&servAddr, 0, sizeof(servAddr));
+    servAddr.sin_family = AF_INET;
+    servAddr.sin_port = htons(SERVER_PORT);
+    servAddr.sin_addr.s_addr = htonl(INADDR_ANY);
+
+    bind(s, (struct sockaddr *)&servAddr, sizeof(servAddr));
+    printf("Server 2 ready. Sending '%s' to connecting clients...\n", msg);
+
+    recvfrom(s, NULL, 0, 0, (struct sockaddr *)&clntAddr, &clntAddrLen);
+    sendto(s, msg, strlen(msg), 0, (struct sockaddr *)&clntAddr, clntAddrLen);
+
+    close(s);
+    return 0;
+}
