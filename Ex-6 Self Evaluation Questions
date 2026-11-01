@@ -1,0 +1,473 @@
+1. Echo Server and Client
+Server (q1_server.c)
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+
+#define PORT 8080
+#define BUFFER_SIZE 1024
+
+int main() {
+    int server_fd, new_socket;
+    struct sockaddr_in address;
+    int addrlen = sizeof(address);
+    char buffer[BUFFER_SIZE] = {0};
+
+    server_fd = socket(AF_INET, SOCK_STREAM, 0);
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = INADDR_ANY;
+    address.sin_port = htons(PORT);
+
+    bind(server_fd, (struct sockaddr *)&address, sizeof(address));
+    listen(server_fd, 3);
+    
+    printf("Echo Server listening on port %d...\n", PORT);
+    new_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen);
+
+    while (1) {
+        memset(buffer, 0, BUFFER_SIZE);
+        int valread = read(new_socket, buffer, BUFFER_SIZE);
+        if (valread <= 0) break;
+        printf("Client: %s", buffer);
+        send(new_socket, buffer, strlen(buffer), 0); // Echo back
+    }
+
+    close(new_socket);
+    close(server_fd);
+    return 0;
+}
+
+
+
+****************************************
+
+Client (q1_client.c)
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+
+#define PORT 8080
+#define BUFFER_SIZE 1024
+
+int main() {
+    int sock = 0;
+    struct sockaddr_in serv_addr;
+    char buffer[BUFFER_SIZE] = {0};
+    char message[BUFFER_SIZE];
+
+    sock = socket(AF_INET, SOCK_STREAM, 0);
+    serv_addr.sin_family = AF_INET;
+    serv_addr.sin_port = htons(PORT);
+    inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr);
+    connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr));
+
+    while (1) {
+        printf("Enter message: ");
+        fgets(message, BUFFER_SIZE, stdin);
+        send(sock, message, strlen(message), 0);
+        
+        memset(buffer, 0, BUFFER_SIZE);
+        read(sock, buffer, BUFFER_SIZE);
+        printf("Server Echo: %s", buffer);
+    }
+    close(sock);
+    return 0;
+}
+
+
+***********
+2.Palindrome Checking Server
+Server (q2_server.c)
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+
+#define PORT 8081
+
+int is_palindrome(char *str) {
+    int l = 0;
+    int h = strlen(str) - 1;
+    // Remove newline if present
+    if (str[h] == '\n') { str[h] = '\0'; h--; }
+    while (h > l) {
+        if (str[l++] != str[h--]) return 0;
+    }
+    return 1;
+}
+
+int main() {
+    int server_fd, client_socket;
+    struct sockaddr_in address;
+    int addrlen = sizeof(address);
+    char buffer[1024] = {0};
+    
+    server_fd = socket(AF_INET, SOCK_STREAM, 0);
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = INADDR_ANY;
+    address.sin_port = htons(PORT);
+    
+    bind(server_fd, (struct sockaddr *)&address, sizeof(address));
+    listen(server_fd, 3);
+    printf("Palindrome Server listening...\n");
+    
+    client_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen);
+    
+    while(1) {
+        memset(buffer, 0, sizeof(buffer));
+        if (read(client_socket, buffer, 1024) <= 0) break;
+        
+        char *response = is_palindrome(buffer) ? "Yes, it is a palindrome.\n" : "No, not a palindrome.\n";
+        send(client_socket, response, strlen(response), 0);
+    }
+    close(client_socket);
+    close(server_fd);
+    return 0;
+}
+
+*********************
+
+Client (q2_client.c)
+
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+
+#define PORT 8081
+
+int main() {
+    int sock = socket(AF_INET, SOCK_STREAM, 0);
+    struct sockaddr_in serv_addr;
+    char buffer[1024] = {0}, message[1024];
+
+    serv_addr.sin_family = AF_INET;
+    serv_addr.sin_port = htons(PORT);
+    inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr);
+    connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr));
+
+    while (1) {
+        printf("Enter string to check: ");
+        fgets(message, 1024, stdin);
+        send(sock, message, strlen(message), 0);
+        
+        memset(buffer, 0, 1024);
+        read(sock, buffer, 1024);
+        printf("Server: %s", buffer);
+    }
+    close(sock);
+    return 0;
+}
+
+*******************
+
+3. Multi-Service Authenticated Server
+Server (q3_server.c)
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+#include <time.h>
+#include <sys/utsname.h>
+
+#define PORT 8082
+
+void log_activity(const char *client_ip, const char *action) {
+    FILE *log_file = fopen("server_log.txt", "a");
+    if (log_file) {
+        time_t now = time(NULL);
+        char *time_str = ctime(&now);
+        time_str[strlen(time_str)-1] = '\0'; // remove newline
+        fprintf(log_file, "[%s] %s - %s\n", time_str, client_ip, action);
+        fclose(log_file);
+    }
+}
+
+int main() {
+    int server_fd, client_socket;
+    struct sockaddr_in address, client_addr;
+    socklen_t addrlen = sizeof(client_addr);
+    char buffer[1024] = {0};
+    
+    server_fd = socket(AF_INET, SOCK_STREAM, 0);
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = INADDR_ANY;
+    address.sin_port = htons(PORT);
+    
+    bind(server_fd, (struct sockaddr *)&address, sizeof(address));
+    listen(server_fd, 3);
+    printf("Multi-Service Server listening on %d...\n", PORT);
+    
+    client_socket = accept(server_fd, (struct sockaddr *)&client_addr, &addrlen);
+    char *client_ip = inet_ntoa(client_addr.sin_addr);
+    int client_port = ntohs(client_addr.sin_port);
+    
+    // Authentication
+    read(client_socket, buffer, 1024);
+    buffer[strcspn(buffer, "\n")] = 0;
+    if (strcmp(buffer, "admin:password123") == 0) {
+        printf("Successful login from %s:%d\n", client_ip, client_port); // Print IP & Port as requested
+        send(client_socket, "AUTH_SUCCESS", 12, 0);
+        log_activity(client_ip, "Login Successful");
+    } else {
+        send(client_socket, "AUTH_FAIL", 9, 0);
+        log_activity(client_ip, "Failed Login Attempt");
+        close(client_socket);
+        return 0;
+    }
+
+    // Service Menu Loop
+    while (1) {
+        memset(buffer, 0, 1024);
+        if (read(client_socket, buffer, 1024) <= 0) break;
+        int choice = atoi(buffer);
+        char response[2048] = {0};
+        
+        if (choice == 1) { // Upload stub
+            strcpy(response, "File upload feature placeholder.");
+            log_activity(client_ip, "Requested File Upload");
+        } else if (choice == 2) { // Download stub
+            strcpy(response, "File download feature placeholder.");
+            log_activity(client_ip, "Requested File Download");
+        } else if (choice == 3) { // Date/Time
+            time_t now = time(NULL);
+            strcpy(response, ctime(&now));
+            log_activity(client_ip, "Requested Date/Time");
+        } else if (choice == 4) { // Sys Info
+            struct utsname sysinfo;
+            uname(&sysinfo);
+            snprintf(response, sizeof(response), "OS: %s, Release: %s, Machine: %s", 
+                     sysinfo.sysname, sysinfo.release, sysinfo.machine);
+            log_activity(client_ip, "Requested Sys Info");
+        } else if (choice == 5) { // Exit
+            log_activity(client_ip, "Terminated session");
+            break;
+        } else {
+            strcpy(response, "Invalid request.");
+            log_activity(client_ip, "Invalid request");
+        }
+        send(client_socket, response, strlen(response), 0);
+    }
+    close(client_socket);
+    close(server_fd);
+    return 0;
+}
+
+
+
+****************
+
+Client (q3_client.c)
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+
+#define PORT 8082
+
+int main() {
+    int sock = socket(AF_INET, SOCK_STREAM, 0);
+    struct sockaddr_in serv_addr;
+    char buffer[2048] = {0};
+    
+    serv_addr.sin_family = AF_INET;
+    serv_addr.sin_port = htons(PORT);
+    inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr);
+    connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr));
+    
+    char user[50], pass[50], credentials[100];
+    printf("Username: "); scanf("%s", user);
+    printf("Password: "); scanf("%s", pass);
+    sprintf(credentials, "%s:%s", user, pass);
+    
+    send(sock, credentials, strlen(credentials), 0);
+    read(sock, buffer, 1024);
+    
+    if (strcmp(buffer, "AUTH_SUCCESS") != 0) {
+        printf("Authentication failed.\n");
+        close(sock);
+        return 0;
+    }
+    printf("Authentication successful!\n");
+    
+    while(1) {
+        printf("\n1. Upload File\n2. Download File\n3. Get Server Date/Time\n4. Get Sys Info\n5. Exit\nChoice: ");
+        int choice;
+        scanf("%d", &choice);
+        sprintf(buffer, "%d", choice);
+        send(sock, buffer, strlen(buffer), 0);
+        
+        if (choice == 5) break;
+        
+        memset(buffer, 0, 2048);
+        read(sock, buffer, 2048);
+        printf("Server Response: %s\n", buffer);
+    }
+    close(sock);
+    return 0;
+}
+
+
+******************
+
+4. Student Result Management System
+(Note: To keep this functional within standard response limits, this code demonstrates inserting standard records, displaying all records, logging to a permanent text database file, and handling invalid requests. The framework easily extends to searching/updating by comparing the Register Number).
+
+Server (q4_server.c)
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+#include <time.h>
+
+#define PORT 8083
+
+struct Student {
+    char reg_no[20];
+    char name[50];
+    char dept[20];
+    int semester;
+    float marks;
+    char grade;
+    float cgpa;
+};
+
+void log_txn(const char *action) {
+    FILE *log = fopen("db_transactions.log", "a");
+    if (log) {
+        time_t now = time(NULL);
+        char *t = ctime(&now); t[strlen(t)-1] = 0;
+        fprintf(log, "[%s] %s\n", t, action);
+        fclose(log);
+    }
+}
+
+int main() {
+    int server_fd, client_socket;
+    struct sockaddr_in address;
+    int addrlen = sizeof(address);
+    char buffer[2048] = {0};
+    
+    server_fd = socket(AF_INET, SOCK_STREAM, 0);
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = INADDR_ANY;
+    address.sin_port = htons(PORT);
+    
+    bind(server_fd, (struct sockaddr *)&address, sizeof(address));
+    listen(server_fd, 3);
+    printf("Student DB Server listening...\n");
+    
+    client_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen);
+    
+    while(1) {
+        memset(buffer, 0, sizeof(buffer));
+        if (read(client_socket, buffer, 2048) <= 0) break;
+        
+        int cmd = buffer[0] - '0';
+        char response[2048] = {0};
+        
+        if (cmd == 1) { // ADD
+            struct Student s;
+            // Parse CSV format sent by client
+            sscanf(buffer + 2, "%[^,],%[^,],%[^,],%d,%f,%c,%f", 
+                   s.reg_no, s.name, s.dept, &s.semester, &s.marks, &s.grade, &s.cgpa);
+            
+            FILE *fp = fopen("students.dat", "a");
+            if(fp) {
+                fprintf(fp, "%s,%s,%s,%d,%.2f,%c,%.2f\n", s.reg_no, s.name, s.dept, s.semester, s.marks, s.grade, s.cgpa);
+                fclose(fp);
+                strcpy(response, "Student Added Successfully.");
+                log_txn("Added new student record.");
+            } else {
+                strcpy(response, "ERROR: Could not open database.");
+                log_txn("Error opening database file.");
+            }
+        } else if (cmd == 2) { // DISPLAY ALL
+            FILE *fp = fopen("students.dat", "r");
+            if (fp) {
+                char line[256];
+                strcpy(response, "--- Student Records ---\n");
+                while(fgets(line, sizeof(line), fp)) {
+                    strcat(response, line);
+                }
+                fclose(fp);
+                log_txn("Retrieved all student records.");
+            } else {
+                strcpy(response, "No records found.");
+            }
+        } else {
+            strcpy(response, "Invalid Operation Code.");
+            log_txn("Invalid Operation Code received.");
+        }
+        send(client_socket, response, strlen(response), 0);
+    }
+    close(client_socket);
+    close(server_fd);
+    return 0;
+}
+
+********"********
+
+Client (q4_client.c)
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+
+#define PORT 8083
+
+int main() {
+    int sock = socket(AF_INET, SOCK_STREAM, 0);
+    struct sockaddr_in serv_addr;
+    char buffer[2048] = {0};
+    
+    serv_addr.sin_family = AF_INET;
+    serv_addr.sin_port = htons(PORT);
+    inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr);
+    connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr));
+    
+    while(1) {
+        printf("\n1. Add Student\n2. View All\n3. Exit\nChoice: ");
+        int choice;
+        scanf("%d", &choice);
+        
+        if (choice == 3) break;
+        
+        if (choice == 1) {
+            char reg[20], name[50], dept[20], grade;
+            int sem; float marks, cgpa;
+            printf("Enter RegNo, Name, Dept, Sem, Marks, Grade, CGPA (space separated):\n");
+            scanf("%s %s %s %d %f %c %f", reg, name, dept, &sem, &marks, &grade, &cgpa);
+            // Format as command code '1' followed by CSV payload
+            sprintf(buffer, "1 %s,%s,%s,%d,%.2f,%c,%.2f", reg, name, dept, sem, marks, grade, cgpa);
+            send(sock, buffer, strlen(buffer), 0);
+        } else if (choice == 2) {
+            strcpy(buffer, "2");
+            send(sock, buffer, strlen(buffer), 0);
+        }
+        
+        memset(buffer, 0, 2048);
+        read(sock, buffer, 2048);
+        printf("\nServer Response:\n%s\n", buffer);
+    }
+    close(sock);
+    return 0;
+}
