@@ -1,0 +1,48 @@
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+
+#define PORT 8081
+
+int is_palindrome(char *str) {
+    int l = 0;
+    int h = strlen(str) - 1;
+    // Remove newline if present
+    if (str[h] == '\n') { str[h] = '\0'; h--; }
+    while (h > l) {
+        if (str[l++] != str[h--]) return 0;
+    }
+    return 1;
+}
+
+int main() {
+    int server_fd, client_socket;
+    struct sockaddr_in address;
+    int addrlen = sizeof(address);
+    char buffer[1024] = {0};
+    
+    server_fd = socket(AF_INET, SOCK_STREAM, 0);
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = INADDR_ANY;
+    address.sin_port = htons(PORT);
+    
+    bind(server_fd, (struct sockaddr *)&address, sizeof(address));
+    listen(server_fd, 3);
+    printf("Palindrome Server listening...\n");
+    
+    client_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen);
+    
+    while(1) {
+        memset(buffer, 0, sizeof(buffer));
+        if (read(client_socket, buffer, 1024) <= 0) break;
+        
+        char *response = is_palindrome(buffer) ? "Yes, it is a palindrome.\n" : "No, not a palindrome.\n";
+        send(client_socket, response, strlen(response), 0);
+    }
+    close(client_socket);
+    close(server_fd);
+    return 0;
+}
