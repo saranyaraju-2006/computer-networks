@@ -1,0 +1,50 @@
+4. LeetCode 480 - Sliding Window Median (Hard)
+This C++ implementation uses a multiset (acting as a self-balancing binary search tree) with a tracking pointer (mid) to maintain the median dynamically as the window slides, operating in O(N \log K) time.  
+
+
+#include <vector>
+#include <set>
+#include <iterator>
+
+using namespace std;
+
+class Solution {
+public:
+    vector<double> medianSlidingWindow(vector<int>& nums, int k) {
+        multiset<long long> window;
+        vector<double> result;
+        
+        // Initialize the first window
+        for (int i = 0; i < k; ++i) {
+            window.insert(nums[i]);
+        }
+        
+        // Iterator pointing to the median
+        auto mid = next(window.begin(), k / 2);
+        
+        for (int i = k; ; ++i) {
+            // Calculate and store the median of the current window
+            if (k % 2 == 1) {
+                result.push_back((double)(*mid));
+            } else {
+                result.push_back(((double)(*mid) + *prev(mid)) / 2.0);
+            }
+            
+            if (i == nums.size()) break;
+            
+            // Insert the new incoming element
+            window.insert(nums[i]);
+            if (nums[i] < *mid) {
+                mid--;
+            }
+            
+            // Remove the old outgoing element
+            if (nums[i - k] <= *mid) {
+                mid++;
+            }
+            window.erase(window.lower_bound(nums[i - k]));
+        }
+        
+        return result;
+    }
+};
